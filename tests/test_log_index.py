@@ -3,7 +3,7 @@
 ครอบคลุม:
 * การ append อ่านกลับ และการอ่านด้วย seek ที่ log_seq * 24
 * การอ่านเหตุการณ์ล่าสุด / ประวัติของ point_id หนึ่ง ๆ
-* กฎ "1 point_id = 1 ระเบียก" ของ index และการอัปเดตแบบ seek + write ทับ
+* กฎ "1 point_id = 1 record" ของ index และการอัปเดตแบบ seek + write ทับ
 * การสร้าง index ใหม่จาก log (rebuild) และการตรวจความสอดคล้อง
 """
 
@@ -32,7 +32,7 @@ class LogIndexTestCase(unittest.TestCase):
 
     @staticmethod
     def make_point(point_id=1001, **overrides) -> models.ChargePoint:
-        """สร้างระเบียกหัวชาร์จตัวอย่างสำหรับบันทึกลง log"""
+        """สร้าง record หัวชาร์จตัวอย่างสำหรับบันทึกลง log"""
         data = {
             "point_id": point_id,
             "station_code": "EVS-0001",
@@ -128,7 +128,7 @@ class TestAuditLog(LogIndexTestCase):
         self.assertEqual(first_snapshot, again)
 
     def test_truncate_incomplete_repairs_truncated_log(self):
-        """log ที่ถูกตัดกลางระเบียกต้องตรวจจับและซ่อมแซมได้"""
+        """log ที่ถูกตัดกลาง record ต้องตรวจจับและซ่อมแซมได้"""
         for pid in (1001, 1002):
             self.audit.append(pid, models.OP_ADD, self.make_point(pid))
         with open(self.log_path, "ab") as fh:
@@ -144,7 +144,7 @@ class TestPointIndex(LogIndexTestCase):
     """ทดสอบ index.dat — ผูก point_id กับ log_seq ล่าสุด"""
 
     def test_update_appends_new_entry(self):
-        """point_id ใหม่ต้องถูกเพิ่มเป็นระเบียกใหม่ท้ายไฟล์"""
+        """point_id ใหม่ต้องถูกเพิ่มเป็น record ใหม่ท้ายไฟล์"""
         self.point_index.update(1001, log_seq=0)
         self.assertEqual(self.point_index.get(1001), 0)
         self.assertEqual(self.point_index.count(), 1)
@@ -152,12 +152,12 @@ class TestPointIndex(LogIndexTestCase):
                          models.INDEX_RECORD_SIZE)
 
     def test_update_same_id_overwrites_in_place(self):
-        """point_id เดิมต้องถูกเขียนทับ (ห้ามเพิ่มระเบียกซ้ำ)"""
+        """point_id เดิมต้องถูกเขียนทับ (ห้ามเพิ่ม record ซ้ำ)"""
         self.point_index.update(1001, log_seq=0)
         self.point_index.update(1001, log_seq=7)
 
         self.assertEqual(self.point_index.get(1001), 7)
-        self.assertEqual(self.point_index.count(), 1, "ต้องมีระเบียกเดียว")
+        self.assertEqual(self.point_index.count(), 1, "ต้องมี record เดียว")
         self.assertEqual(os.path.getsize(self.index_path),
                          models.INDEX_RECORD_SIZE,
                          "ขนาดไฟล์ต้องไม่เพิ่ม (เขียนทับ ไม่ใช่ append)")
@@ -171,7 +171,7 @@ class TestPointIndex(LogIndexTestCase):
         self.assertEqual(os.path.getsize(self.index_path),
                          2 * models.INDEX_RECORD_SIZE)
 
-        # อ่านไฟล์ดิบเพื่อยืนยันว่าไม่มีระเบียกซ้ำจริง ๆ
+        # อ่านไฟล์ดิบเพื่อยืนยันว่าไม่มี record ซ้ำจริง ๆ
         with open(self.index_path, "rb") as fh:
             raw = fh.read()
         ids = [models.unpack_index_entry(
@@ -249,7 +249,7 @@ class TestPointIndex(LogIndexTestCase):
         self.assertTrue(any("4242" in problem for problem in problems))
 
     def test_index_truncate_incomplete(self):
-        """index ที่ถูกตัดกลางระเบียกต้องซ่อมแซมได้"""
+        """index ที่ถูกตัดกลาง record ต้องซ่อมแซมได้"""
         self.point_index.update(1001, log_seq=0)
         with open(self.index_path, "ab") as fh:
             fh.write(b"\x00" * 3)

@@ -30,7 +30,7 @@ class StorageTestCase(unittest.TestCase):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def make_point(self, point_id=1001, **overrides) -> models.ChargePoint:
-        """สร้างระเบียกหัวชาร์จสำหรับทดสอบ"""
+        """สร้าง record หัวชาร์จสำหรับทดสอบ"""
         data = {
             "point_id": point_id,
             "station_code": "EVS-0001",
@@ -49,7 +49,7 @@ class StorageTestCase(unittest.TestCase):
 
 
 class TestCreateRead(StorageTestCase):
-    """ทดสอบการสร้างและอ่านระเบียก"""
+    """ทดสอบการสร้างและอ่าน record"""
 
     def test_new_file_is_empty_and_created(self):
         """เปิด store ต้องสร้างไฟล์ว่างขึ้นมาให้"""
@@ -58,7 +58,7 @@ class TestCreateRead(StorageTestCase):
         self.assertEqual(self.store.file_size(), 0)
 
     def test_append_creates_82_byte_records(self):
-        """ทุกระเบียกที่เพิ่มต้องทำให้ไฟล์โตขึ้น 82 ไบต์พอดี"""
+        """ทุก record ที่เพิ่มต้องทำให้ไฟล์โตขึ้น 82 ไบต์พอดี"""
         for expected_count in range(1, 6):
             self.store.append(self.make_point(point_id=1000 + expected_count))
             self.assertEqual(self.store.file_size(),
@@ -78,14 +78,14 @@ class TestCreateRead(StorageTestCase):
         self.assertAlmostEqual(restored.price_per_kwh, 8.25, places=3)
 
     def test_read_all_returns_every_record_in_order(self):
-        """read_all ต้องคืนทุกระเบียกเรียงตาม slot"""
+        """read_all ต้องคืนทุก record เรียงตาม slot"""
         for pid in (1001, 1002, 1003):
             self.store.append(self.make_point(point_id=pid))
         points = self.store.read_all()
         self.assertEqual([p.point_id for p in points], [1001, 1002, 1003])
 
     def test_read_all_can_exclude_deleted(self):
-        """include_deleted=False ต้องตัดระเบียกที่ถูก soft delete ออก"""
+        """include_deleted=False ต้องตัด record ที่ถูก soft delete ออก"""
         self.store.append(self.make_point(point_id=1001))
         self.store.append(self.make_point(point_id=1002, is_deleted=1))
         self.assertEqual(len(self.store.read_all(include_deleted=True)), 2)
@@ -103,10 +103,10 @@ class TestCreateRead(StorageTestCase):
         restored = storage.ChargePointStore.decode_record(point.to_bytes())
         self.assertEqual(restored.point_id, 555)
 class TestUpdateAndDelete(StorageTestCase):
-    """ทดสอบการเขียนทับระเบียก (seek + write) และ soft delete"""
+    """ทดสอบการเขียนทับ record (seek + write) และ soft delete"""
 
     def test_write_at_overwrites_in_place(self):
-        """การแก้ไขต้องเขียนทับขนาดไฟล์เท่าเดิม (ไม่เพิ่มระเบียกใหม่)"""
+        """การแก้ไขต้องเขียนทับขนาดไฟล์เท่าเดิม (ไม่เพิ่ม record ใหม่)"""
         self.store.append(self.make_point(point_id=1001))
         self.store.append(self.make_point(point_id=1002))
         size_before = self.store.file_size()
@@ -119,7 +119,7 @@ class TestUpdateAndDelete(StorageTestCase):
         self.assertEqual(self.store.count_records(), 2)
         self.assertAlmostEqual(self.store.read_at(0).price_per_kwh, 9.99, places=4)
         self.assertEqual(self.store.read_at(0).is_booked, 1)
-        # ระเบียกอื่นต้องไม่ถูกกระทบ
+        # record อื่นต้องไม่ถูกกระทบ
         self.assertEqual(self.store.read_at(1).point_id, 1002)
 
     def test_find_slot_and_exists(self):
@@ -131,7 +131,7 @@ class TestUpdateAndDelete(StorageTestCase):
         self.assertFalse(self.store.exists(9999))
 
     def test_find_slot_skips_deleted_by_default(self):
-        """ค้นหาปกติต้องไม่เจอระเบียกที่ถูกลบ แต่ระบุ include_deleted ได้"""
+        """ค้นหาปกติต้องไม่เจอ record ที่ถูกลบ แต่ระบุ include_deleted ได้"""
         self.store.append(self.make_point(point_id=1001, is_deleted=1))
         self.assertIsNone(self.store.find_slot(1001))
         self.assertEqual(self.store.find_slot(1001, include_deleted=True), 0)
@@ -181,7 +181,7 @@ class TestFreeList(StorageTestCase):
         self.assertTrue(reused, "ควรถูกจัดเป็นการใช้ช่องว่างซ้ำ")
         self.assertEqual(slot, 1, "ต้องใช้ slot ที่ 1 ซึ่งเคยถูกลบ")
         self.assertEqual(self.store.file_size(), size_before,
-                         "ขนาดไฟล์ต้องไม่เพิ่ม (ไม่เกิดระเบียกใหม่)")
+                         "ขนาดไฟล์ต้องไม่เพิ่ม (ไม่เกิด record ใหม่)")
         self.assertEqual(self.store.read_at(1).point_id, 2002)
 
     def test_free_slot_removed_from_list_after_reuse(self):
@@ -210,7 +210,7 @@ class TestFreeList(StorageTestCase):
         self.assertEqual(self.store.read_at(0).is_deleted, 0)
         self.assertEqual(self.store.read_at(0).location, "กู้ช่อง")
     def test_free_slot_count_reports_reusable_slots(self):
-        """free_slot_count ต้องนับเฉพาะระเบียกที่ถูกลบ"""
+        """free_slot_count ต้องนับเฉพาะ record ที่ถูกลบ"""
         for pid, deleted in ((1001, 0), (1002, 1), (1003, 0), (1004, 1)):
             self.store.append(self.make_point(point_id=pid, is_deleted=deleted))
         self.assertEqual(self.store.free_slot_count(), 2)
@@ -249,18 +249,18 @@ class TestCorruptedFile(StorageTestCase):
     """ทดสอบการตรวจจับและซ่อมแซมไฟล์ที่ถูกตัดกลางระเบียน"""
 
     def test_integrity_ok_for_whole_records(self):
-        """ไฟล์ที่มีแต่ระเบียกครบถือว่าปกติ"""
+        """ไฟล์ที่มีแต่ record ครบถือว่าปกติ"""
         self.store.append(self.make_point(point_id=1001))
         valid, remainder = self.store.integrity_check()
         self.assertTrue(valid)
         self.assertEqual(remainder, 0)
 
     def test_detects_truncated_record(self):
-        """ไฟล์ที่ถูกตัดกลางระเบียกต้องถูกตรวจจับได้"""
+        """ไฟล์ที่ถูกตัดกลาง record ต้องถูกตรวจจับได้"""
         self.store.append(self.make_point(point_id=1001))
         self.store.append(self.make_point(point_id=1002))
 
-        # จำลองการตัดไฟล์ทิ้ง 30 ไบต์ (เหลือระเบียกครึ่งตัว)
+        # จำลองการตัดไฟล์ทิ้ง 30 ไบต์ (เหลือ record ครึ่งตัว)
         with open(self.data_path, "r+b") as fh:
             fh.truncate(models.RECORD_SIZE + 30)
 
@@ -269,7 +269,7 @@ class TestCorruptedFile(StorageTestCase):
         self.assertEqual(remainder, 30)
 
     def test_truncate_incomplete_repairs_file(self):
-        """ซ่อมแซมแล้วขนาดไฟล์ต้องหารลงตัวและอ่านระเบียกที่ครบได้"""
+        """ซ่อมแซมแล้วขนาดไฟล์ต้องหารลงตัวและอ่าน record ที่ครบได้"""
         self.store.append(self.make_point(point_id=1001))
         self.store.append(self.make_point(point_id=1002))
         with open(self.data_path, "r+b") as fh:
@@ -289,17 +289,17 @@ class TestCorruptedFile(StorageTestCase):
         self.assertEqual(self.store.count_records(), 1)
 
     def test_read_all_ignores_incomplete_tail(self):
-        """การอ่านต้องหยุดอย่างปลอดภัยเมื่อเจอระเบียกไม่ครบท้ายไฟล์"""
+        """การอ่านต้องหยุดอย่างปลอดภัยเมื่อเจอ record ไม่ครบท้ายไฟล์"""
         self.store.append(self.make_point(point_id=1001))
         self.store.append(self.make_point(point_id=1002))
-        with open(self.data_path, "ab") as fh:      # เขียนข้อมูลทิ้งกลางระเบียก
+        with open(self.data_path, "ab") as fh:      # เขียนข้อมูลทิ้งกลาง record
             fh.write(b"\x00" * 17)
 
         points = self.store.read_all()
         self.assertEqual([p.point_id for p in points], [1001, 1002])
 
     def test_free_slots_scan_survives_truncated_tail(self):
-        """การสแกน free-list ต้องไม่พังเมื่อไฟล์ท้ายไม่ครบระเบียก"""
+        """การสแกน free-list ต้องไม่พังเมื่อไฟล์ท้ายไม่ครบ record"""
         self.store.append(self.make_point(point_id=1001, is_deleted=1))
         with open(self.data_path, "ab") as fh:
             fh.write(b"\x00" * 40)

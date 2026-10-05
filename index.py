@@ -1,19 +1,19 @@
 """index.py — ดัชนี point_id -> log_seq (index.dat)
 
-ไฟล์ index.dat เก็บระเบียกละ 8 ไบต์ (struct ``<ll``) เพื่อผูก ``point_id`` กับ "ลำดับ
+ไฟล์ index.dat เก็บ record ละ 8 ไบต์ (struct ``<ll``) เพื่อผูก ``point_id`` กับ "ลำดับ
 เริ่มที่ 0" ของเหตุการณ์ล่าสุดใน charge_points.log ทำให้ค้นประวัติล่าสุดของหัวชาร์จ
 ได้ทันทีด้วย ``seek(log_seq * 24)`` โดยไม่ต้องไล่อ่าน log ทั้งไฟล์
 
 กติกาสำคัญ
 ----------
-* 1 point_id มีได้ **1 ระเบียกเท่านั้น** ใน index (ห้ามซ้ำ)
-* ถ้ามีอยู่แล้วให้ **อัปเดต log_seq แบบ seek + write ทับ** ระเบียกเดิม
+* 1 point_id มีได้ **1 record เท่านั้น** ใน index (ห้ามซ้ำ)
+* ถ้ามีอยู่แล้วให้ **อัปเดต log_seq แบบ seek + write ทับ** record เดิม
 * ถ้า index เสีย/หาย/ไม่ตรงกับ log ต้อง **สร้างใหม่จาก log ได้** (rebuild)
 
-การจัดการ "ระเบียกซ้ำใน index"
+การจัดการ "record ซ้ำใน index"
 ------------------------------
 ตอนโหลดไฟล์ ถ้าพบ point_id ซ้ำ (อาจเกิดจากการเขียนผิดหรือไฟล์เสีย) จะเก็บค่าจาก
-ระเบียกที่ log_seq มากสุดไว้เสมอ เพื่อให้ผลลัพธ์ตรงกับตรรกะ "อัปเดตทับค่าเดิม"
+record ที่ log_seq มากสุดไว้เสมอ เพื่อให้ผลลัพธ์ตรงกับตรรกะ "อัปเดตทับค่าเดิม"
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ import models
 
 
 class PointIndex:
-    """คลาสจัดการไฟล์ index.dat แบบ 1 point_id = 1 ระเบียก
+    """คลาสจัดการไฟล์ index.dat แบบ 1 point_id = 1 record
 
     Attributes:
         path: พาธของไฟล์ดัชนี
@@ -50,13 +50,13 @@ class PointIndex:
         """ตรวจว่าขนาด index หารด้วย 8 ลงตัวหรือไม่
 
         Returns:
-            (is_valid, remainder_bytes) — remainder คือไบต์เกินท้ายที่เป็นระเบียกไม่ครบ
+            (is_valid, remainder_bytes) — remainder คือไบต์เกินท้ายที่เป็น record ไม่ครบ
         """
         remainder = os.path.getsize(self.path) % models.INDEX_RECORD_SIZE
         return (remainder == 0, remainder)
 
     def truncate_incomplete(self) -> int:
-        """ตัดระเบียก index ที่ไม่ครบ 8 ไบต์ทิ้ง (ไฟล์ถูกตัดกลางระเบียก)
+        """ตัด record index ที่ไม่ครบ 8 ไบต์ทิ้ง (ไฟล์ถูกตัดกลาง record)
 
         Returns:
             จำนวนไบต์ที่ถูกตัดทิ้ง (0 เมื่อไฟล์ปกติ)
@@ -113,12 +113,12 @@ class PointIndex:
         """ผูก point_id กับ log_seq (seek + write ทับเมื่อมีอยู่แล้ว)
 
         ขั้นตอน:
-            1. ถ้า point_id มีอยู่แล้ว -> seek ไป offset = slot*8 แล้วเขียนทับระเบียกเดิม
-            2. ถ้ายังไม่มี -> ต่อระเบียกใหม่ท้ายไฟล์ (ไม่ต้อง rewrite ทั้งไฟล์)
+            1. ถ้า point_id มีอยู่แล้ว -> seek ไป offset = slot*8 แล้วเขียนทับ record เดิม
+            2. ถ้ายังไม่มี -> ต่อ record ใหม่ท้ายไฟล์ (ไม่ต้อง rewrite ทั้งไฟล์)
         """
         entry = models.IndexEntry(point_id=point_id, log_seq=log_seq)
         if point_id in self._slot_by_id:
-            # กรณีที่ 1: seek ไปทับระเบียกเดิมของ point_id นี้
+            # กรณีที่ 1: seek ไปทับ record เดิมของ point_id นี้
             offset = self._slot_by_id[point_id] * models.INDEX_RECORD_SIZE
             with open(self.path, "r+b") as fh:
                 fh.seek(offset)
@@ -137,7 +137,7 @@ class PointIndex:
         self._seq_by_id[point_id] = log_seq
 
     def remove(self, point_id: int) -> bool:
-        """ลบ point_id ออกจากดัชนีโดยเขียนไฟล์ใหม่ทั้งไฟล์ (คงระเบียกที่เหลือไว้)
+        """ลบ point_id ออกจากดัชนีโดยเขียนไฟล์ใหม่ทั้งไฟล์ (คง record ที่เหลือไว้)
 
         ใช้เป็นเครื่องมือซ่อมแซม ยังไม่ได้เรียกใน CRUD ปกติ เพราะต้องรักษา
         ประวัติของ point_id ไว้เพื่อให้ค้นย้อนหลังได้

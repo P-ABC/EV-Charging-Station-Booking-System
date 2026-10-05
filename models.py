@@ -36,6 +36,7 @@ DATA_FILE_NAME = "charge_points.dat"
 LOG_FILE_NAME = "charge_points.log"
 INDEX_FILE_NAME = "index.dat"
 REPORT_FILE_NAME = "report.txt"
+LOCATION_FILE_NAME = "locations.txt"   # ชื่อสถานที่ตั้งแบบเต็ม (ข้อความ UTF-8)
 
 # กติกาทางธุรกิจที่ใช้ตรวจสอบอินพุต
 STATION_CODE_PATTERN = "EVS-NNNN"
@@ -133,7 +134,7 @@ def now_timestamp() -> int:
 # ---------------------------------------------------------------------------
 @dataclass
 class ChargePoint:
-    """หัวชาร์จ 1 หัว = 1 ระเบียก 82 ไบต์ใน charge_points.dat"""
+    """หัวชาร์จ 1 หัว = 1 record 82 ไบต์ใน charge_points.dat"""
 
     point_id: int
     station_code: str
@@ -233,7 +234,7 @@ class LogEntry:
 
 @dataclass
 class IndexEntry:
-    """ระเบียกดัชนี 1 รายการใน index.dat (8 ไบต์) — point_id -> log_seq"""
+    """record ดัชนี 1 รายการใน index.dat (8 ไบต์) — point_id -> log_seq"""
 
     point_id: int
     log_seq: int
@@ -294,7 +295,7 @@ def unpack_log_entry(data: bytes) -> LogEntry:
 
 
 def pack_index_entry(entry: IndexEntry) -> bytes:
-    """pack ระเบียกดัชนีเป็นไบต์ 8 ไบต์"""
+    """pack record ดัชนีเป็นไบต์ 8 ไบต์"""
     return entry.to_bytes()
 
 

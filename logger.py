@@ -1,10 +1,10 @@
 """logger.py — audit log แบบ append-only (charge_points.log)
 
-ไฟล์ log เก็บ 1 ระเบียก (24 ไบต์) ต่อ 1 เหตุการณ์ ทุกครั้งที่ Add/Update/Delete/View
+ไฟล์ log เก็บ 1 record (24 ไบต์) ต่อ 1 เหตุการณ์ ทุกครั้งที่ Add/Update/Delete/View
 เพื่อให้ตรวจสอบย้อนหลังได้ โดยอ้างอิงตำแหน่งได้จาก "ลำดับ" (log_seq) ซึ่งเริ่มที่ 0
 
 การคำนวณ offset:  offset = log_seq * LOG_RECORD_SIZE (24 ไบต์)
-จึงไล่อ่านประวัติทั้งหมดไม่ต้องเปิดอ่านทั้งไฟล์ และอ่านระเบียกเดียวได้ด้วย seek ตรง ๆ
+จึงไล่อ่านประวัติทั้งหมดไม่ต้องเปิดอ่านทั้งไฟล์ และอ่าน record เดียวได้ด้วย seek ตรง ๆ
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ class AuditLog:
         return (remainder == 0, remainder)
 
     def truncate_incomplete(self) -> int:
-        """ตัดระเบียก log ที่ไม่ครบ 24 ไบต์ทิ้ง (ไฟล์ถูกตัดกลางระเบียน)
+        """ตัด record log ที่ไม่ครบ 24 ไบต์ทิ้ง (ไฟล์ถูกตัดกลางระเบียน)
 
         Returns:
             จำนวนไบต์ที่ถูกตัดทิ้ง

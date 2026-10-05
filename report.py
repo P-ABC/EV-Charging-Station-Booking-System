@@ -30,6 +30,70 @@ THAI_TZ = timezone(timedelta(hours=7))
 REPORT_TITLE = "EV Charging Station Booking System - Summary Report"
 RECENT_ACTIVITY_LIMIT = 5      # จำนวนเหตุการณ์ล่าสุดที่แสดงในรายงาน
 
+# ความกว้างสูงสุดของตารางในรายงาน (จำนวนช่อง)
+# ต้องไม่เกินความกว้างหน้าจอที่ใช้เปิดไฟล์ทั่วไป มิฉะนั้นโปรแกรมจะ
+# ตัดบรรทัด (wrap) แล้วเส้น "|" ที่ปลายบรรทัดจะตกไปบรรทัดถัดไป
+# ทำให้เส้นแนวตั้งของตารางดูเหมือนไม่ตรงกัน
+DEFAULT_MAX_TABLE_WIDTH = 96
+MIN_COLUMN_WIDTH = 6          # ความกว้างขั้นต่ำของคอลัมน์ที่ยอมให้แคบ
+
+# ---------------------------------------------------------------------------
+# 0) โหมดการวัดความกว้าง (เลือกได้ 2 แบบ เพื่อให้ตารางตรงในทุกโปรแกรมเปิดไฟล์)
+# ---------------------------------------------------------------------------
+# ปัญหาที่พบ
+# ------------
+# สระ/วรรณยุกต์ไทย (ั ิ ี ื ุ ู ็ ่ ้ ์) เป็น "อักขระประสม" ที่ Unicode นับเป็น
+# 1 ตัวอักษร แต่กินพื้นที่บนจอ **0 ช่อง** ดังนั้นบรรทัดเดียวกันจะมี
+# "จำนวนตัวอักษร" กับ "ความกว้างจริง" ไม่เท่ากัน เช่น 149 ถึง 157 ตัวอักษร
+#
+# ผลที่ตามมา: ถ้าโปรแกรมที่เปิดไฟล์นับตำแหน่งเส้น "|" จาก "จำนวนตัวอักษร"
+# (เช่น โปรแกรมที่ไม่รองรับการจัดวางสระไทย หรือไม่มีฟอนต์ไทย) เส้นแนวตั้ง
+# ของตารางจะเบี้ยวไม่ตรงกัน
+#
+# การแก้ไข
+# ---------
+# จึงเพิ่ม 2 โหมด ให้ผู้ใช้เลือกตามโปรแกรมที่เปิดดูรายงาน:
+#
+#   * smart (ค่าเริ่มต้น) — วัดด้วย display_width (นับสระไทยเป็น 0 ช่อง)
+#     ตารางจะตรงใน Terminal และโปรแกรมที่จัดวางสระไทยได้ถูกต้อง
+#     (เช่น Windows Terminal, VS Code, Notepad รุ่นใหม่)
+#
+#   * simple — นับทุกตัวอักษรเป็น 1 ช่อง (len)
+#     ตารางจะตรงในโปรแกรมที่ไม่จัดวางสระไทยหรือไม่มีฟอนต์ไทย
+#
+# ทั้งสองโหมดผลิตผลได้ถูกต้อง เพียงแต่วัดความกว้างคนละแบบ
+_SMART_WIDTH = True
+
+
+def set_alignment_mode(smart: bool = True) -> None:
+    """เลือกวิธีวัดความกว้างของตาราง
+
+    Args:
+        smart: True = วัดด้วย display_width (นับสระ/วรรณยุกต์ไทยเป็น 0 ช่อง)
+            False = นับทุกตัวอักษรเป็น 1 ช่อง (เหมาะกับโปรแกรมที่ไม่จัดวางสระไทย)
+    """
+    global _SMART_WIDTH
+    _SMART_WIDTH = bool(smart)
+
+
+def alignment_mode_name() -> str:
+    """คืนชื่อโหมดปัจจุบันเป็นข้อความ ("smart" หรือ "simple")"""
+    return "smart" if _SMART_WIDTH else "simple"
+
+
+def measure(text: str) -> int:
+    """วัดความกว้างของข้อความตามโหมดที่เลือกไว้ปัจจุบัน
+
+    Args:
+        text: ข้อความที่จะวัด
+
+    Returns:
+        ความกว้างเป็นจำนวนช่องตามโหมดปัจจุบัน
+    """
+    if _SMART_WIDTH:
+        return display_width(text)
+    return len(text or "")
+
 
 # ---------------------------------------------------------------------------
 # 1) การวัดความกว้างเชิงการแสดงผล (รองรับภาษาไทย/อีมโจจิ)
@@ -83,7 +147,7 @@ def pad_to_width(text: str, width: int, align: str = "left") -> str:
         width: ความกว้างเป้าหมายเป็นจำนวนช่อง
         align: "left" หรือ "right"
     """
-    padding = max(0, width - display_width(text))
+    padding = max(0, width - measure(text))
     if align == "right":
         return " " * padding + text
     return text + " " * padding
@@ -94,14 +158,14 @@ def truncate_to_width(text: str, width: int) -> str:
 
     ใช้กับข้อความภาษาไทยยาว ๆ ในตาราง เพื่อไม่ให้เส้นขอบตารางเบี้ยว
     """
-    if display_width(text) <= width:
+    if measure(text) <= width:
         return text
     ellipsis = "..."                      # จุดไข่ปลา ใช้พื้นที่ 3 ช่อง
     result = ""
     current = 0
-    budget = width - display_width(ellipsis)
+    budget = width - measure(ellipsis)
     for char in text:
-        char_width = _char_width(char)
+        char_width = 1 if not _SMART_WIDTH else _char_width(char)
         if current + char_width > budget:
             break
         result += char
@@ -111,18 +175,66 @@ def truncate_to_width(text: str, width: int) -> str:
 # ---------------------------------------------------------------------------
 # 2) การเรนเดอร์ตาราง
 # ---------------------------------------------------------------------------
+def _fit_column_widths(widths: List[int], max_width: int,
+                       floors: Optional[Sequence[int]] = None) -> List[int]:
+    """ลดความกว้างคอลัมน์ที่กว้างที่สุดลงจนพอดีกับความกว้างที่กำหนด
+
+    เหตุผลที่ต้องทำ
+    --------------
+    ตารางที่กว้างเกินกว่าความกว้างหน้าจอ (มักเกิน 100 ช่อง) จะถูกโปรแกรม
+    ที่เปิดไฟล์ตัดบรรทัด (wrap) ทำให้เส้น "|" ที่อยู่ปลายบรรทัด
+    ตกไปบรรทัดถัดไป เส้นแนวตั้งจึงดูเหมือนไม่ตรงกัน
+
+    กติกาการลดความกว้าง
+    ------------------
+    * ลดทีละ 1 ช่องจากคอลัมน์ที่กว้างที่สุดเสมอ เพื่อให้ความกว้างสมดุลกัน
+    * **ห้ามลดให้ต่ำกว่าความกว้างหัวคอลัมน์** เพราะหัวที่ถูกตัดกลายเป็น
+      "Struct f..." ซึ่งอ่านไม่รู้เรื่อง ถ้าลดไม่ได้จริงจะปล่อยให้ตาราง
+      กว้างเกินไปเล็กน้อยดีกว่าทำให้ข้อมูลสำคัญหาย
+
+    Args:
+        widths: ความกว้างธรรมชาติของแต่ละคอลัมน์
+        max_width: ความกว้างรวมสูงสุดที่ยอมรับ (รวมเส้นขอบและช่องว่าง)
+        floors: ความกว้างขั้นต่ำของแต่ละคอลัมน์ (ปกติคือความกว้างหัวคอลัมน์)
+
+    Returns:
+        รายการความกว้างใหม่ที่รวมกันไม่เกิน max_width (ถ้าเป็นไปได้)
+    """
+    widths = list(widths)
+    if not max_width or not widths:
+        return widths
+    if floors is None:
+        floors = [MIN_COLUMN_WIDTH] * len(widths)
+    # หักส่วนที่ใช้ไปกับช่องว่างรอบเซลล์ (2 ต่อคอลัมน์) และเส้นขอบ (n+1 ตัว)
+    limit = max_width - (len(widths) * 2 + len(widths) + 1)
+    while sum(widths) > limit:
+        # เลือกคอลัมน์ที่กว้างที่สุดและยังเหลือที่จะลดได้
+        candidates = [index for index in range(len(widths))
+                      if widths[index] > floors[index]]
+        if not candidates:
+            break                      # ลดต่ำกว่าหัวคอลัมน์ไม่ได้แล้ว
+        widest = max(candidates, key=lambda index: widths[index])
+        widths[widest] -= 1
+    return widths
+
+
 def render_table(headers: Sequence[str], rows: Sequence[Sequence[str]],
-                 aligns: Optional[Sequence[str]] = None) -> List[str]:
+                 aligns: Optional[Sequence[str]] = None,
+                 max_width: Optional[int] = DEFAULT_MAX_TABLE_WIDTH
+                 ) -> List[str]:
     """สร้างบรรทัดตาราง (รวมเส้นขอบแบบ +----+ และ |) ตามความกว้างเนื้อหาจริง
 
     ความกว้างคอลัมน์คำนวณจาก display_width จึงรองรับภาษาไทยที่มีสระ/วรรณยุกต์
-    โดยไม่ทำให้เส้นขอบตารางเบี้ยว
+    โดยไม่ทำให้เส้นขอบตารางเบี้ยว และถูกจำกัดไม่เกิน ``max_width``
+    เพื่อไม่ให้ตารางกว้างจนโปรแกรมที่เปิดไฟล์ต้องตัดบรรทัด
+    (ซึ่งจะทำให้เส้นแนวตั้งดูเหมือนไม่ตรง)
 
     Args:
         headers: หัวคอลัมน์
         rows: แต่ละแถวเป็น sequence ของข้อความ
         aligns: การจัดตำแหน่งของแต่ละคอลัมน์ ("left"/"right") ถ้าไม่ส่งค่า
             จะจัดตำแหน่งตามประเภทของหัวคอลัมน์อัตโนมัติ (ตัวเลข -> right)
+        max_width: ความกว้างรวมสูงสุดที่ยอมรับ (None = ไม่จำกัด)
 
     Returns:
         รายการบรรทัดของตาราง (ยังไม่รวม \n)
@@ -132,10 +244,14 @@ def render_table(headers: Sequence[str], rows: Sequence[Sequence[str]],
                   for header in headers]
 
     # ความกว้างของแต่ละคอลัมน์ = ความกว้างหัวคอลัมน์ที่กว้างที่สุด
-    widths = [display_width(header) for header in headers]
+    widths = [measure(header) for header in headers]
     for row in rows:
         for index, cell in enumerate(row):
-            widths[index] = max(widths[index], display_width(str(cell)))
+            widths[index] = max(widths[index], measure(str(cell)))
+    # จำกัดความกว้างรวมไม่ให้เกินความกว้างหน้าจอ
+    # โดยห้ามลดต่ำกว่าความกว้างหัวคอลัมน์ (กันหัวตารางถูกตัดจนอ่านไม่ออก)
+    header_widths = [measure(header) for header in headers]
+    widths = _fit_column_widths(widths, max_width, header_widths)
 
     def line(left: str, mid: str, right: str) -> str:
         return left + mid.join("-" * (width + 2) for width in widths) + right
@@ -176,12 +292,12 @@ def compute_summary(points: Sequence[models.ChargePoint]) -> Dict[str, int]:
     """คำนวณตัวเลขสรุปสำหรับรายงาน
 
     กติกานับ (ตามสเปก):
-        * Total Points   = จำนวนระเบียกทั้งหมดที่อ่านได้ (รวมที่ถูกลบแล้ว)
+        * Total Points   = จำนวน record ทั้งหมดที่อ่านได้ (รวมที่ถูกลบแล้ว)
         * Active Points  = จำนวนที่ is_deleted=0 และ status=1
         * Deleted Points = จำนวนที่ is_deleted=1
         * Booked         = จำนวนที่ is_deleted=0 และ is_booked=1
         * Available Now  = จำนวนที่ is_deleted=0 และ status=1 และ is_booked=0
-        * Free Slots     = จำนวนระเบียกที่ is_deleted=1 (ช่องว่างที่นำกลับมาใช้ได้)
+        * Free Slots     = จำนวน record ที่ is_deleted=1 (ช่องว่างที่นำกลับมาใช้ได้)
     """
     alive = [point for point in points if not point.is_deleted]
     return {
@@ -196,7 +312,7 @@ def compute_summary(points: Sequence[models.ChargePoint]) -> Dict[str, int]:
 
 
 def compute_price_stats(points: Sequence[models.ChargePoint]) -> Dict[str, float]:
-    """คำนวณราคาต่ำสุด/สูงสุด/เฉลี่ย (นับเฉพาะระเบียกที่ยังไม่ถูกลบและ Active)
+    """คำนวณราคาต่ำสุด/สูงสุด/เฉลี่ย (นับเฉพาะ record ที่ยังไม่ถูกลบและ Active)
 
     Returns:
         {"min": float, "max": float, "avg": float} — ถ้าไม่มีข้อมูลจะคืน 0.0 ทั้งหมด
@@ -213,7 +329,7 @@ def compute_price_stats(points: Sequence[models.ChargePoint]) -> Dict[str, float
 
 
 def count_plug_types(points: Sequence[models.ChargePoint]) -> Dict[str, int]:
-    """นับจำนวนหัวชาร์จแยกตามประเภทหัว (นับเฉพาะระเบียกที่ยังไม่ถูกลบและ Active)
+    """นับจำนวนหัวชาร์จแยกตามประเภทหัว (นับเฉพาะ record ที่ยังไม่ถูกลบและ Active)
 
     Returns:
         dict ที่มี key ครบทุกประเภทตามลำดับ CCS2, Type2, CHAdeMO, GB-T
@@ -237,7 +353,7 @@ def build_report(points: Sequence[models.ChargePoint],
     """ประกอบข้อความรายงานฉบับเต็ม (ยังไม่เขียนลงไฟล์)
 
     Args:
-        points: ระเบียกหัวชาร์จทั้งหมด (รวมที่ถูก soft delete แล้ว)
+        points: record หัวชาร์จทั้งหมด (รวมที่ถูก soft delete แล้ว)
         log_entries: เหตุการณ์ใน audit log (เรียงจากเก่าไปใหม่)
         generated_at: Unix timestamp ของเวลาสร้างรายงาน (ค่าเริ่มต้น = เวลาปัจจุบัน)
 
@@ -339,7 +455,7 @@ def generate_report(points: Sequence[models.ChargePoint],
     """สร้างและ **เขียนรายงานลงไฟล์** (UTF-8) แล้ว flush + fsync ให้แน่นอน
 
     Args:
-        points: ระเบียกหัวชาร์จทั้งหมด (รวมที่ถูก soft delete แล้ว)
+        points: record หัวชาร์จทั้งหมด (รวมที่ถูก soft delete แล้ว)
         log_entries: เหตุการณ์ใน audit log
         path: พาธไฟล์รายงาน (เช่น report.txt)
         generated_at: Unix timestamp ของเวลาสร้างรายงาน

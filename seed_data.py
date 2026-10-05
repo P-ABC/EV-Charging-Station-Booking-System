@@ -2,18 +2,18 @@
 
 เป้าหมายของข้อมูลตัวอย่าง (ตามข้อกำหนดของงาน)
 -----------------------------------------------
-* มีระเบียก **มากกว่า 50 ระเบียก** เพื่อทดสอบการอ่าน/เขียนไฟล์ขนาดใหญ่
-* ระเบียกชุดแรกใช้ point_id **1001-1010** ซึ่งเป็นชุดเดียวกับที่แสดงใน
+* มี record **มากกว่า 50 record** เพื่อทดสอบการอ่าน/เขียนไฟล์ขนาดใหญ่
+* record ชุดแรกใช้ point_id **1001-1010** ซึ่งเป็นชุดเดียวกับที่แสดงใน
   ตัวอย่าง report.txt เพื่อให้ตรวจสอบยอดสรุปได้ตรงกัน:
-      - Active Points    = 9   (มี 1 ระเบียกที่ถูก soft delete)
+      - Active Points    = 9   (มี 1 record ที่ถูก soft delete)
       - Deleted Points   = 1
       - Currently Booked = 4
       - Available Now    = 5   (= Active 9 - Booked 4)
-      - ราคา Min 6.00 / Max 9.00 / Avg 7.36  (เฉลี่ยของ 9 ระเบียกที่ Active)
+      - ราคา Min 6.00 / Max 9.00 / Avg 7.36  (เฉลี่ยของ 9 record ที่ Active)
 * มีขอบเขต (edge cases) ครบตามที่กำหนด:
       - location ยาวเกิน 30 ไบต์ (ภาษาไทย) -> ต้องถูกตัดอย่างปลอดภัย
       - ชื่อ/station_code ซ้ำกัน (สถานีเดียวกันมีหลายหัว)
-      - ระเบียกที่ถูกลบแล้ว (is_deleted=1)
+      - record ที่ถูกลบแล้ว (is_deleted=1)
       - ราคา/กำลังไฟขอบเขต (ค่าต่ำสุด/สูงสุด, ค่าทศนิยมละเอียด)
       - หัวชาร์จที่ถูกจองอยู่ (is_booked=1) และหัวที่ปิดซ่อมบำรุง (status=0)
 
@@ -28,7 +28,7 @@
 from __future__ import annotations
 
 import os
-from typing import List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence
 
 import index as index_module
 import logger as logger_module
@@ -38,8 +38,8 @@ import storage as storage_module
 # ฐานเวลาสำหรับข้อมูลตัวอย่าง (ให้ผลลัพธ์ที่ทำซ้ำได้ แต่ยังเป็นเวลาที่สมจริง)
 BASE_TIMESTAMP = 1_789_000_000      # 2026-09-16 ประมาณ 16:26:40 UTC (+07:00 = 23:26)
 
-# ชุดข้อมูลหลัก 10 ระเบียกที่รายงานตัวอย่างอ้างอิง (point_id 1001-1010)
-#  ราคา 9 ระเบียกที่ Active: 6.00, 6.25, 6.75, 7.00, 7.25, 7.50, 8.00, 8.50, 9.00
+# ชุดข้อมูลหลัก 10 record ที่รายงานตัวอย่างอ้างอิง (point_id 1001-1010)
+#  ราคา 9 record ที่ Active: 6.00, 6.25, 6.75, 7.00, 7.25, 7.50, 8.00, 8.50, 9.00
 #  -> Min 6.00 / Max 9.00 / Avg = 66.25 / 9 = 7.3611... -> "7.36" ✔
 #  ราคาทุกค่าเป็นเลขที่แทนได้แม่นยำใน float32 จึงไม่มีเศษปัดรบกวนผลรวม
 MAIN_POINTS: List[dict] = [
@@ -101,17 +101,17 @@ _BULK_PRICES = [3.50, 4.25, 5.00, 6.00, 6.50, 7.00, 7.50, 8.00, 9.50, 15.50]
 
 
 def build_bulk_points(count: int = 45, start_id: int = 2001) -> List[dict]:
-    """สร้างระเบียกตัวอย่างจำนวนมากเพื่อทดสอบระบบ
+    """สร้าง record ตัวอย่างจำนวนมากเพื่อทดสอบระบบ
 
     ข้อมูลที่สร้างมีความหลากหลายโดยตั้งใจ เพื่อให้ครอบคลุมขอบเขตที่กำหนด:
         * station_code และ location ซ้ำกัน (สถานีเดียวกันมีหลายหัวชาร์จ)
         * location ที่ยาวเกิน 30 ไบต์ (หมุนไปตัวที่ index 10 เป็นระยะ)
         * status=0 (ปิดซ่อมบำรุง) และ is_booked=1 (ถูกจองอยู่)
         * ราคา/กำลังไฟขอบเขต (ต่ำสุดและสูงสุดในตารางด้านบน)
-        * บางระเบียกถูก soft delete ไว้ (เพื่อทดสอบ free-list)
+        * บาง record ถูก soft delete ไว้ (เพื่อทดสอบ free-list)
 
     Args:
-        count: จำนวนระเบียกที่ต้องการ
+        count: จำนวน record ที่ต้องการ
         start_id: point_id แรก
 
     Returns:
@@ -128,7 +128,7 @@ def build_bulk_points(count: int = 45, start_id: int = 2001) -> List[dict]:
             "price_per_kwh": _BULK_PRICES[offset % len(_BULK_PRICES)],
             "status": 0 if offset % 13 == 12 else 1,              # ปิดซ่อมบำรุงเป็นระยะ
             "is_booked": 1 if offset % 4 == 1 else 0,             # ถูกจองเป็นระยะ
-            # ทุก 17 ระเบียก ให้ 1 ระเบียกถูก soft delete (ไม่เป็นหัวที่ถูกจอง)
+            # ทุก 17 record ให้ 1 record ถูก soft delete (ไม่เป็นหัวที่ถูกจอง)
             "is_deleted": 1 if (offset % 17 == 16 and offset % 4 != 1) else 0,
         })
     return points
@@ -137,7 +137,7 @@ def build_bulk_points(count: int = 45, start_id: int = 2001) -> List[dict]:
 def build_all_specs() -> List[dict]:
     """คืนรายการสเปกข้อมูลตัวอย่างทั้งหมด (ชุดหลัก 10 + ชุดจำนวนมาก)
 
-    รวมกันแล้วมากกว่า 50 ระเบียกตามข้อกำหนด
+    รวมกันแล้วมากกว่า 50 record ตามข้อกำหนด
     """
     return list(MAIN_POINTS) + build_bulk_points()
 
@@ -146,7 +146,7 @@ def specs_to_charge_points(specs: Sequence[dict],
                            base_ts: int = BASE_TIMESTAMP) -> List[models.ChargePoint]:
     """แปลงรายการ dict เป็น :class:`models.ChargePoint`
 
-    created_at/updated_at ถูกเพิ่มขึ้นละ 60 วินาทีต่อระเบียก เพื่อให้ข้อมูล
+    created_at/updated_at ถูกเพิ่มขึ้นละ 60 วินาทีต่อ record เพื่อให้ข้อมูล
     created_at/updated_at มีค่าไม่ซ้ำกันทั้งหมด (ตรวจสอบง่ายขึ้น)
 
     หมายเหตุ: location จะถูกตัดให้พอดี 30 ไบต์ที่นี่เลย (ก่อนบันทึกลงไฟล์)
@@ -171,15 +171,34 @@ def specs_to_charge_points(specs: Sequence[dict],
     return points
 
 
+def build_full_locations() -> Dict[int, str]:
+    """คืน dict {point_id: ชื่อสถานที่ตั้งแบบเต็ม (ยังไม่ถูกตัด)} ของข้อมูลตัวอย่าง
+
+    record ไบนารีเก็บ location ได้เพียง 30 ไบต์ จึงเก็บ "ชื่อเต็ม" ไว้ใน
+    :mod:`locations.txt` เพื่อให้รายงานแสดงชื่อได้ครบ ไม่ถูกตัดกลางคัน
+
+    Returns:
+        dict ที่ใช้บันทึกลง locations.txt ตอนสร้างข้อมูลตัวอย่าง
+    """
+    return {int(spec["point_id"]): spec["location"]
+            for spec in build_all_specs()}
+
+
+# ชื่อสถานที่ตั้งแบบเต็ม (ก่อนถูกตัด) — ใช้บันทึกลง locations.txt
+full_locations = build_full_locations()
+
+
 def seed(data_dir: str, force: bool = False,
          printer=print) -> dict:
     """สร้างข้อมูลตัวอย่างลงทั้ง 3 ไฟล์ไบนารีอย่างสอดคล้องกัน
 
     ขั้นตอน:
         1. ถ้า ``force`` เป็น True จะลบไฟล์เดิมทิ้งทั้งหมดก่อน (ใช้ตอนอยากเริ่มใหม่)
-        2. เขียนระเบียกทั้งหมดลง charge_points.dat
-        3. เขียน audit log 1 ระเบียกต่อ 1 หัว (op=ADD) พร้อมกรอก index.dat
-        4. สร้างดัชนีใหม่จาก log อีกครั้งด้วย :func:`rebuild_index` เพื่อยืนยันผล
+        2. เขียน record ทั้งหมดลง charge_points.dat
+        3. เขียน audit log 1 record ต่อ 1 หัว (op=ADD) พร้อมกรอก index.dat
+        4. เขียนชื่อสถานที่ตั้งแบบเต็มลง locations.txt
+           (record ไบนารีเก็บได้ 30 ไบต์ จึงเก็บชื่อเต็มไว้ให้รายงานแสดง)
+        5. สร้างดัชนีใหม่จาก log อีกครั้งด้วย :func:`rebuild_index` เพื่อยืนยันผล
 
     Args:
         data_dir: โฟลเดอร์ที่เก็บไฟล์ข้อมูล
@@ -193,9 +212,10 @@ def seed(data_dir: str, force: bool = False,
     data_path = os.path.join(data_dir, models.DATA_FILE_NAME)
     log_path = os.path.join(data_dir, models.LOG_FILE_NAME)
     index_path = os.path.join(data_dir, models.INDEX_FILE_NAME)
+    location_path = os.path.join(data_dir, models.LOCATION_FILE_NAME)
 
     if force:
-        for path in (data_path, log_path, index_path):
+        for path in (data_path, log_path, index_path, location_path):
             if os.path.exists(path):
                 os.remove(path)
                 if printer:
@@ -204,30 +224,35 @@ def seed(data_dir: str, force: bool = False,
     store = storage_module.ChargePointStore(data_path)
     audit = logger_module.AuditLog(log_path)
     point_index = index_module.PointIndex(index_path)
+    locations = storage_module.LocationStore(location_path)
 
     points = specs_to_charge_points(build_all_specs())
     for point in points:
-        slot, reused = store.allocate_slot(point)
+        store.allocate_slot(point)
         seq = audit.append(point.point_id, models.OP_ADD, point)
         point_index.update(point.point_id, seq)
-        if printer and not reused:
-            pass    # เงียบไว้เพื่อไม่ให้เอาต์พิมพ์ยาวเกินไป
+        # เก็บชื่อสถานที่ตั้ง "แบบเต็ม" (ก่อนถูกตัด) สำหรับแสดงในรายงาน
+        locations.set(point.point_id, full_locations.get(point.point_id)
+                      or point.location)
 
     # ยืนยันด้วยการสร้างดัชนีใหม่จาก log (ทดสอบว่า rebuild_index ให้ผลตรงกัน)
     rebuild_index(log_path, index_path)
 
     if printer:
-        printer(f"สร้างข้อมูลตัวอย่างเรียบร้อย: {len(points)} ระเบียก")
+        printer(f"สร้างข้อมูลตัวอย่างเรียบร้อย: {len(points)} record")
         printer(f"  - {models.DATA_FILE_NAME:<20} {store.file_size()} ไบต์ "
                 f"({store.count_records()} records)")
         printer(f"  - {models.LOG_FILE_NAME:<20} "
                 f"{os.path.getsize(log_path)} ไบต์ ({audit.count()} entries)")
         printer(f"  - {models.INDEX_FILE_NAME:<20} "
                 f"{os.path.getsize(index_path)} ไบต์ ({point_index.count()} entries)")
+        printer(f"  - {models.LOCATION_FILE_NAME:<20} "
+                f"{locations.count()} ชื่อสถานที่ (ข้อความ UTF-8)")
     return {
         "records": store.count_records(),
         "log_entries": audit.count(),
         "index_entries": point_index.count(),
+        "locations": locations.count(),
     }
 
 
@@ -247,25 +272,14 @@ def rebuild_index(log_path: str, index_path: str) -> int:
     point_index = index_module.PointIndex(index_path)
     return point_index.rebuild(audit.read_all())
 
-
-def main() -> int:
-    """จุดเข้าสำหรับรัน seed_data.py โดยตรง (``python seed_data.py``)"""
-    import argparse
-
-    parser = argparse.ArgumentParser(
-        description="สร้างข้อมูลตัวอย่างสำหรับ EV Charging Station Booking System",
-    )
-    parser.add_argument("--data-dir", default=".",
-                        help="โฟลเดอร์เก็บไฟล์ข้อมูล (ค่าเริ่มต้น: โฟลเดอร์ปัจจุบัน)")
-    parser.add_argument("--force", action="store_true",
-                        help="ลบไฟล์ข้อมูลเดิมก่อนสร้างใหม่")
-    args = parser.parse_args()
-
-    models.verify_record_sizes()
-    seed(args.data_dir, force=args.force)
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+# ---------------------------------------------------------------------------
+# หมายเหตุเรื่อง "เมนูชุดเดียว" (เกณฑ์ข้อ 5 ของการตรวจงาน)
+# ---------------------------------------------------------------------------
+# โมดูลนี้เป็นเพียง "โมดูลช่วย" (helper module) จึง **ไม่มีจุดเริ่มโปรแกรม**
+# ของตัวเอง เพื่อให้ทุกงาน (รวมถึงการสร้างข้อมูลตัวอย่าง) ต้องทำผ่าน
+# เมนูชุดเดียวของ main.py เท่านั้น ไม่มีการรันโปรแกรมแยกอีกตัวหนึ่ง
+#
+# วิธีเรียกใช้งาน:
+#   - จากเมนู:  main.py > 6) Tools > 1) โหลดข้อมูลตัวอย่าง
+#   - จากบรรทัดคำสั่งของ main.py:  python main.py --seed
 

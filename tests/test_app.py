@@ -17,6 +17,7 @@ import index as index_module
 import logger as logger_module
 import main
 import models
+import reports as reports_module
 import seed_data
 import storage
 
@@ -48,7 +49,7 @@ class TestAddMenu(AppTestCase):
     """ทดสอบเมนู 1) Add"""
 
     def test_add_creates_record_log_and_index(self):
-        """เพิ่มข้อมูลแล้วต้องมีทั้งระเบียกในไฟล์, log และ index"""
+        """เพิ่มข้อมูลแล้วต้องมีทั้ง record ในไฟล์, log และ index"""
         point = self.add(1001)
         self.assertEqual(point.point_id, 1001)
         self.assertEqual(self.app.store.count_records(), 1)
@@ -79,7 +80,7 @@ class TestAddMenu(AppTestCase):
         self.assertNotIn("\ufffd", point.location)
 
     def test_add_duplicate_raises(self):
-        """point_id ซ้ำกับระเบียกที่ยังไม่ถูกลบต้องถูกปฏิเสธ"""
+        """point_id ซ้ำกับ record ที่ยังไม่ถูกลบต้องถูกปฏิเสธ"""
         self.add(1001)
         with self.assertRaises(storage.DuplicatePointError):
             self.add(1001)
@@ -93,7 +94,7 @@ class TestAddMenu(AppTestCase):
 
         self.add(1001)
         self.assertEqual(self.app.store.count_records(), 1,
-                         "ต้องใช้ช่องว่างเดิม ไม่เพิ่มระเบียกใหม่")
+                         "ต้องใช้ช่องว่างเดิม ไม่เพิ่ม record ใหม่")
 class TestUpdateMenu(AppTestCase):
     """ทดสอบเมนู 2) Update"""
 
@@ -109,7 +110,7 @@ class TestUpdateMenu(AppTestCase):
         self.assertAlmostEqual(updated.power_kw, 350.0, places=3)
 
     def test_update_does_not_change_file_size(self):
-        """การแก้ไขต้องเขียนทับระเบียกเดิม (ขนาดไฟล์คงที่)"""
+        """การแก้ไขต้องเขียนทับ record เดิม (ขนาดไฟล์คงที่)"""
         size_before = self.app.store.file_size()
         self.app.update_record(1001, location="ที่ใหม่")
         self.assertEqual(self.app.store.file_size(), size_before)
@@ -150,7 +151,7 @@ class TestUpdateMenu(AppTestCase):
             self.app.update_record(1001, created_at=0)
 
     def test_update_deleted_record_not_found(self):
-        """ระเบียกที่ถูก soft delete แล้วถือว่าไม่พบในการแก้ไข"""
+        """record ที่ถูก soft delete แล้วถือว่าไม่พบในการแก้ไข"""
         self.app.delete_record(1001)
         with self.assertRaises(storage.PointNotFoundError):
             self.app.update_record(1001, status=0)
@@ -160,7 +161,7 @@ class TestDeleteMenu(AppTestCase):
     """ทดสอบเมนู 3) Delete (soft delete)"""
 
     def test_delete_sets_flag_and_keeps_record(self):
-        """ลบต้องตั้ง is_deleted=1 แต่ระเบียกยังอยู่ในไฟล์"""
+        """ลบต้องตั้ง is_deleted=1 แต่ record ยังอยู่ในไฟล์"""
         self.add(1001)
         deleted = self.app.delete_record(1001)
         self.assertEqual(deleted.is_deleted, 1)
@@ -228,7 +229,7 @@ class TestViewMenu(AppTestCase):
         self.assertEqual(self.app.point_index.get(1001), latest)
 
     def test_view_single_finds_deleted_record(self):
-        """ค้นหารายเดียวต้องเจอแม้ระเบียกที่ถูก soft delete"""
+        """ค้นหารายเดียวต้องเจอแม้ record ที่ถูก soft delete"""
         self.add(1001)
         self.app.delete_record(1001)
         point = self.app.view_record(1001)
@@ -256,7 +257,7 @@ class TestViewMenu(AppTestCase):
         self.assertEqual(self.app.history_of(9999), [])
 
     def test_view_all_includes_deleted(self):
-        """เมนู 4.2 ต้องรวมระเบียกที่ถูกลบแล้ว"""
+        """เมนู 4.2 ต้องรวม record ที่ถูกลบแล้ว"""
         self.add(1001)
         self.add(1002)
         self.app.delete_record(1002)
@@ -274,11 +275,11 @@ class TestStartupCheckAndRepair(AppTestCase):
         self.assertEqual(messages, [])
 
     def test_startup_repairs_truncated_data_file(self):
-        """ไฟล์ข้อมูลที่ถูกตัดกลางระเบียกต้องถูกตัดส่วนเกินทิ้งให้อัตโนมัติ"""
+        """ไฟล์ข้อมูลที่ถูกตัดกลาง record ต้องถูกตัดส่วนเกินทิ้งให้อัตโนมัติ"""
         self.add(1001)
         self.add(1002)
         with open(self.app.data_path, "ab") as fh:
-            fh.write(b"\x00" * 25)         # ระเบียกไม่ครบ
+            fh.write(b"\x00" * 25)         # record ไม่ครบ
 
         app = main.ChargingStationApp(self.tmp_dir)
         messages = app.startup_check()
@@ -288,7 +289,7 @@ class TestStartupCheckAndRepair(AppTestCase):
         self.assertEqual(app.store.count_records(), 2)
 
     def test_startup_repairs_truncated_log_file(self):
-        """ไฟล์ log ที่ถูกตัดกลางระเบียกต้องถูกซ่อมแซม"""
+        """ไฟล์ log ที่ถูกตัดกลาง record ต้องถูกซ่อมแซม"""
         self.add(1001)
         with open(self.app.log_path, "ab") as fh:
             fh.write(b"\x00" * 10)
@@ -355,13 +356,13 @@ class TestSeedAndFullReport(AppTestCase):
         return self.app
 
     def test_seed_creates_more_than_50_records(self):
-        """ข้อมูลตัวอย่างต้องมีมากกว่า 50 ระเบียกตามข้อกำหนด"""
+        """ข้อมูลตัวอย่างต้องมีมากกว่า 50 record ตามข้อกำหนด"""
         app = self.seed_and_reload()
         self.assertGreater(app.store.count_records(), 50)
         self.assertEqual(app.store.count_records(), 55)
 
     def test_seed_creates_matching_log_and_index(self):
-        """จำนวน log และ index ต้องเท่ากับจำนวนระเบียก"""
+        """จำนวน log และ index ต้องเท่ากับจำนวน record"""
         app = self.seed_and_reload()
         records = app.store.count_records()
         self.assertEqual(self.app.audit.count(), records)
@@ -386,7 +387,7 @@ class TestSeedAndFullReport(AppTestCase):
         """ข้อมูลตัวอย่างต้องครอบคลุมขอบเขตที่กำหนด"""
         points = self.seed_and_reload().store.read_all(include_deleted=True)
 
-        # มีระเบียกที่ถูก soft delete
+        # มี record ที่ถูก soft delete
         self.assertTrue(any(point.is_deleted for point in points))
         # มีหัวที่ถูกจองอยู่
         self.assertTrue(any(point.is_booked == 1 for point in points))
@@ -412,20 +413,37 @@ class TestSeedAndFullReport(AppTestCase):
             self.assertNotIn("\ufffd", point.location)
 
     def test_full_report_from_seed_contains_summary(self):
-        """รายงานฉบับเต็มจากข้อมูลตัวอย่างต้องมีสรุปและตารางครบ"""
-        report_path = self.seed_and_reload().generate_report()
+        """รายงานทั้ง 3 ชุดจากข้อมูลตัวอย่างต้องมีสรุปและตารางครบ"""
+        created = self.seed_and_reload().generate_report()
 
-        self.assertTrue(os.path.exists(report_path))
-        with open(report_path, "r", encoding="utf-8") as fh:
-            content = fh.read()
+        # ต้องได้ไฟล์รายงาน 3 ไฟล์
+        self.assertEqual(len(created), 3)
 
-        self.assertIn("EV Charging Station Booking System", content)
-        self.assertIn("Endianness   : Little-Endian", content)
-        self.assertIn("(+07:00)", content)
-        self.assertIn("Price Statistics (THB/kWh, Active only)", content)
-        self.assertIn("- Total Points (records) : 55", content)
-        self.assertIn("Recent Activity", content)
-        self.assertIn("Points by Plug Type (Active only)", content)
+        # ตรวจรายงานชุดที่ 1 (สถานะหัวชาร์จรายหัว)
+        points_path = created[reports_module.REPORT_POINTS_NAME]
+        self.assertTrue(os.path.exists(points_path))
+        with open(points_path, "r", encoding="utf-8") as fh:
+            points_content = fh.read()
+        self.assertIn("Generated At", points_content)
+        self.assertIn("Endianness   : Little-Endian", points_content)
+        self.assertIn("(+07:00)", points_content)
+        self.assertIn("[SUMMARY]", points_content)
+        self.assertIn("| Total Points (records)              | 55 ", points_content)
+
+        # ตรวจรายงานชุดที่ 2 (สถิติ) ต้องมีตัวเลขราคาและกิจกรรม
+        stats_path = created[reports_module.REPORT_STATS_NAME]
+        self.assertTrue(os.path.exists(stats_path))
+        with open(stats_path, "r", encoding="utf-8") as fh:
+            stats_content = fh.read()
+        self.assertIn("ค่าเฉลี่ย (Avg)", stats_content)
+        self.assertIn("กิจกรรมล่าสุดจาก charge_points.log", stats_content)
+
+        # ตรวจรายงานชุดที่ 3 (สถานะระบบไฟล์)
+        system_path = created[reports_module.REPORT_SYSTEM_NAME]
+        self.assertTrue(os.path.exists(system_path))
+        with open(system_path, "r", encoding="utf-8") as fh:
+            system_content = fh.read()
+        self.assertIn("สถานะไฟล์ไบนารีทั้ง 3 ไฟล์", system_content)
 
     def test_report_of_main_sample_matches_spec_numbers(self):
         """รายงานจากชุด 1001-1010 ต้องตรงกับตัวเลขในข้อกำหนด"""
@@ -437,24 +455,36 @@ class TestSeedAndFullReport(AppTestCase):
                 # จำลองสถานะ "ถูกลบแล้ว" ด้วยการ soft delete ตามตรรกะปกติ
                 self.app.delete_record(spec["point_id"])
 
-        report_path = self.app.generate_report()
+        created = self.app.generate_report()
 
-        with open(report_path, "r", encoding="utf-8") as fh:
+        with open(created[reports_module.REPORT_POINTS_NAME],
+                  "r", encoding="utf-8") as fh:
             content = fh.read()
 
-        self.assertIn("- Total Points (records) : 10", content)
-        self.assertIn("- Active Points          : 9", content)
-        self.assertIn("- Deleted Points         : 1", content)
-        self.assertIn("- Currently Booked       : 4", content)
-        self.assertIn("- Available Now          : 5", content)
-        self.assertIn("6.00 / 9.00 / 7.36", content)
+        self.assertIn("Total Points (records)", content)
+        self.assertIn("| 10 ", content)
+        self.assertIn("Active Points", content)
+        self.assertIn("| 9 ", content)
+        self.assertIn("Deleted Points (soft delete)", content)
+        self.assertIn("| 1 ", content)
+        self.assertIn("Available Now (Active & not booked)", content)
+        self.assertIn("| 5 ", content)
 
-    def test_shutdown_writes_report_and_fsyncs(self):
-        """การออกโปรแกรมต้องสร้างรายงานและซีลข้อมูลทั้ง 3 ไฟล์"""
+        with open(created[reports_module.REPORT_STATS_NAME],
+                  "r", encoding="utf-8") as fh:
+            stats = fh.read()
+        self.assertIn("7.36", stats)
+
+    def test_shutdown_writes_reports_and_fsyncs(self):
+        """การออกโปรแกรมต้องสร้างรายงานทั้ง 3 ชุดและซีลข้อมูลทั้ง 3 ไฟล์"""
         self.add(1001)
         self.app._shutdown()
-        self.assertTrue(os.path.exists(self.app.report_path))
-        self.assertEqual(os.path.getsize(self.app.report_path) > 0, True)
+
+        for file_name in reports_module.ALL_REPORT_NAMES:
+            path = os.path.join(self.tmp_dir, file_name)
+            self.assertTrue(os.path.exists(path), f"ไม่พบ {file_name}")
+            self.assertGreater(os.path.getsize(path), 0,
+                               f"{file_name} ว่างเปล่า")
 
 
 class TestMenuLoopExit(AppTestCase):
@@ -481,8 +511,11 @@ class TestMenuLoopExit(AppTestCase):
         sys.stdin = _io.StringIO("")       # ไม่มีข้อมูลเลย = EOF ทันที
         try:
             self.assertEqual(self.app.run(), 0)
-            self.assertTrue(os.path.exists(self.app.report_path),
-                            "ต้องสร้างรายงานตอนออกโปรแกรม")
+            # ต้องสร้างรายงานทั้ง 3 ชุดตอนออกโปรแกรม
+            for file_name in reports_module.ALL_REPORT_NAMES:
+                self.assertTrue(
+                    os.path.exists(os.path.join(self.tmp_dir, file_name)),
+                    f"ต้องสร้าง {file_name} ตอนออกโปรแกรม")
         finally:
             sys.stdin = original_stdin
 

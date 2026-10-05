@@ -29,6 +29,7 @@ import index as index_module
 import logger as logger_module
 import models
 import report as report_module
+import reports as reports_module
 import seed_data
 import storage as storage_module
 import validators
@@ -51,10 +52,13 @@ class ChargingStationApp:
         self.log_path = os.path.join(self.data_dir, models.LOG_FILE_NAME)
         self.index_path = os.path.join(self.data_dir, models.INDEX_FILE_NAME)
         self.report_path = os.path.join(self.data_dir, models.REPORT_FILE_NAME)
+        self.location_path = os.path.join(self.data_dir,
+                                          models.LOCATION_FILE_NAME)
 
         self.store = storage_module.ChargePointStore(self.data_path)
         self.audit = logger_module.AuditLog(self.log_path)
         self.point_index = index_module.PointIndex(self.index_path)
+        self.location_store = storage_module.LocationStore(self.location_path)
 
     # ------------------------------------------------------------------
     # การตรวจความถูกต้องของไฟล์ตอนเริ่มโปรแกรม
@@ -67,7 +71,7 @@ class ChargingStationApp:
             2. index.dat สอดคล้องกับ charge_points.log หรือไม่ (ถ้าไม่ -> rebuild)
 
         Args:
-            auto_repair: True = ตัดระเบียกที่ไม่ครบและสร้าง index ใหม่อัตโนมัติ
+            auto_repair: True = ตัด record ที่ไม่ครบและสร้าง index ใหม่อัตโนมัติ
 
         Returns:
             รายการข้อความที่แจ้งเตือนผู้ใช้ (ว่างเปล่า = ไม่มีปัญหา)
@@ -88,7 +92,7 @@ class ChargingStationApp:
                     truncate()
                     messages.append(
                         f"[ซ่อมแซม] {label} เสียหาย (ท้ายไฟล์เหลือ {remainder} ไบต์ "
-                        f"ที่ไม่ครบระเบียก) — ตัดส่วนเกินทิ้งแล้ว"
+                        f"ที่ไม่ครบ record) — ตัดส่วนเกินทิ้งแล้ว"
                     )
                 else:
                     messages.append(
@@ -121,7 +125,7 @@ class ChargingStationApp:
     # ------------------------------------------------------------------
     def _record_event(self, point: models.ChargePoint,
                       op_code: int) -> int:
-        """เขียน audit log 1 ระเบียก แล้วอัปเดต index ให้ชี้ log_seq ล่าสุด
+        """เขียน audit log 1 record แล้วอัปเดต index ให้ชี้ log_seq ล่าสุด
 
         ทุกเหตุการณ์ Add/Update/Delete/View ต้องเรียกฟังก์ชันนี้ เพื่อให้
         index.dat และ log ไม่หลุดจากกัน
@@ -144,7 +148,7 @@ class ChargingStationApp:
         """เพิ่มหัวชาร์จ 1 หัวลงไฟล์ + log + index (ตรรกะหลักของเมนู Add)
 
         Raises:
-            DuplicatePointError: เมื่อ point_id ซ้ำกับระเบียกที่ยังไม่ถูกลบ
+            DuplicatePointError: เมื่อ point_id ซ้ำกับ record ที่ยังไม่ถูกลบ
         """
         if self.store.exists(point_id):
             raise storage_module.DuplicatePointError(
@@ -167,6 +171,9 @@ class ChargingStationApp:
         )
         # allocate_slot จะนำช่องว่างที่เคย soft delete ทิ้งมาใช้ซ้ำก่อนเสมอ
         self.store.allocate_slot(point)
+        # เก็บชื่อสถานที่แบบเต็มไว้ในไฟล์ข้อความ เพื่อให้รายงานแสดงได้ครบ
+        # (record ไบนารีเก็บค่าที่ตัดถึง 30 ไบต์ตามสเปก)
+        self.location_store.set(point_id, location)
         self._record_event(point, models.OP_ADD)
         return point
 
@@ -212,7 +219,10 @@ class ChargingStationApp:
             created_at=point.created_at,                 # ห้ามแก้
             updated_at=models.now_timestamp(),
         )
-        self.store.write_at(slot, updated)               # seek + write ทับระเบียกเดิม
+        self.store.write_at(slot, updated)               # seek + write ทับ record เดิม
+        if "location" in changes:
+            # อัปเดตชื่อสถานที่แบบเต็มด้วย (ถ้าผู้ใช้กรอกค่าใหม่)
+            self.location_store.set(point_id, changes["location"])
         self._record_event(updated, models.OP_UPDATE)
         return updated
 
@@ -263,7 +273,7 @@ class ChargingStationApp:
         """อ่านหัวชาร์จ 1 หัวพร้อมเขียน log (op=VIEW) ตามข้อกำหนด
 
         Returns:
-            ระเบียกที่พบ หรือ None เมื่อไม่พบ (ค้นหารวมระเบียกที่ถูก soft delete)
+            record ที่พบ หรือ None เมื่อไม่พบ (ค้นหารวม record ที่ถูก soft delete)
         """
         slot = self.store.find_slot(point_id, include_deleted=True)
         if slot is None:
@@ -291,13 +301,13 @@ class ChargingStationApp:
 
         ขั้นตอน:
             1. รับและตรวจสอบข้อมูลทุกฟิลด์ (ถ้าผิดจะถามใหม่)
-            2. ตรวจ point_id ซ้ำกับระเบียกที่ยังไม่ถูกลบหรือไม่
+            2. ตรวจ point_id ซ้ำกับ record ที่ยังไม่ถูกลบหรือไม่
             3. จัดสรรช่อง (ใช้ช่องว่างที่เคยลบทิ้งก่อน ไม่งั้นต่อท้ายไฟล์)
             4. ตั้ง created_at/updated_at = เวลาปัจจุบัน
             5. เขียน log (op=ADD) และอัปเดต index
 
         Returns:
-            ระเบียกที่สร้างสำเร็จ หรือ None เมื่อ point_id ซ้ำ
+            record ที่สร้างสำเร็จ หรือ None เมื่อ point_id ซ้ำ
         """
         print("\n--- Add New Charge Point ---")
         point_id = validators.ask_point_id()
@@ -339,11 +349,11 @@ class ChargingStationApp:
         """แก้ไขหัวชาร์จ 1 หัว (แก้ได้ทุกฟิลด์ ยกเว้น point_id และ created_at)
 
         รองรับการสลับ status และ is_booked (จอง/ปล่อยหัวชาร์จ)
-        อัปเดต updated_at เป็นเวลาปัจจุบัน เขียนทับระเบียกเดิมด้วย seek
+        อัปเดต updated_at เป็นเวลาปัจจุบัน เขียนทับ record เดิมด้วย seek
         แล้วเขียน log (op=UPDATE) พร้อมอัปเดต index
 
         Returns:
-            ระเบียกหลังแก้ไข หรือ None เมื่อไม่พบ point_id
+            record หลังแก้ไข หรือ None เมื่อไม่พบ point_id
         """
         print("\n--- Update Charge Point ---")
         point_id = validators.ask_point_id()
@@ -488,7 +498,7 @@ class ChargingStationApp:
         log_seq = self.point_index.get(point_id)
         print(f"\n   --- ประวัติล่าสุด (อ่านผ่าน index.dat, log_seq={log_seq}) ---")
         if log_seq is None:
-            print("     (ไม่พบระเบียกใน index.dat — อาจต้องใช้ --rebuild-index)")
+            print("     (ไม่พบ record ใน index.dat — อาจต้องใช้ --rebuild-index)")
             return
         history = self.history_of(point_id, limit=10)
         if not history:
@@ -508,10 +518,10 @@ class ChargingStationApp:
     # เมนู 4.2) View ทั้งหมด
     # ------------------------------------------------------------------
     def view_all(self) -> None:
-        """ดูหัวชาร์จทั้งหมด (ขอรวมระเบียกที่ถูก soft delete ด้วย)
+        """ดูหัวชาร์จทั้งหมด (ขอรวม record ที่ถูก soft delete ด้วย)
 
-        ตามข้อกำหนด: 4.2 เป็นเมนูที่ "รวมที่ลบแล้ว" จึงแสดงระเบียกทั้งหมด
-        คอลัมน์ Status จะแสดง Deleted สำหรับระเบียกที่ถูกลบ
+        ตามข้อกำหนด: 4.2 เป็นเมนูที่ "รวมที่ลบแล้ว" จึงแสดง record ทั้งหมด
+        คอลัมน์ Status จะแสดง Deleted สำหรับ record ที่ถูกลบ
         """
         print("\n--- View All Charge Points (including deleted) ---")
         points = self.store.read_all(include_deleted=True)
@@ -520,17 +530,20 @@ class ChargingStationApp:
             return
 
         rows = [
-            (str(point.point_id), point.station_code, point.location,
+            (str(point.point_id), point.station_code,
+             self.location_store.full_location(point),
              point.plug_type, f"{point.power_kw:.1f}",
              f"{point.price_per_kwh:.2f}", point.status_text, point.booked_text)
             for point in points
         ]
         headers = ["PtID", "Station", "Location", "Plug", "Power(kW)",
                    "Price(THB/kWh)", "Status", "Booked"]
-        for line in report_module.render_table(headers, rows):
+        # ไม่จำกัดความกว้างบน Terminal เพื่อให้ชื่อสถานที่ตั้งแสดงครบทุกตัวอักษร
+        # (Terminal ปรับความกว้างเองได้ ต่างจากไฟล์ .txt ที่ต้องพอดีหน้าจอ)
+        for line in report_module.render_table(headers, rows, max_width=None):
             print(line)
-        print(f"   รวม {len(points)} ระเบียก "
-              f"(ข้อมูลในไฟล์: {self.store.count_records()} ระเบียก)")
+        print(f"   รวม {len(points)} record "
+              f"(ข้อมูลในไฟล์: {self.store.count_records()} record)")
 
     # ------------------------------------------------------------------
     # เมนู 4.3) View แบบกรอง
@@ -570,19 +583,21 @@ class ChargingStationApp:
 
         if not points:
             print(f"   ไม่พบข้อมูลที่ตรงกับเงื่อนไข "
-                  f"{field_name}={value} (ระบบข้ามระเบียกที่ถูกลบแล้ว)")
+                  f"{field_name}={value} (ระบบข้าม record ที่ถูกลบแล้ว)")
             return
 
         rows = [
-            (str(point.point_id), point.station_code, point.location,
+            (str(point.point_id), point.station_code,
+             self.location_store.full_location(point),
              point.plug_type, f"{point.power_kw:.1f}",
              f"{point.price_per_kwh:.2f}", point.status_text, point.booked_text)
             for point in points
         ]
         headers = ["PtID", "Station", "Location", "Plug", "Power(kW)",
                    "Price(THB/kWh)", "Status", "Booked"]
-        print(f"   ผลลัพธ์ ({field_name}={value}): พบ {len(points)} ระเบียก")
-        for line in report_module.render_table(headers, rows):
+        print(f"   ผลลัพธ์ ({field_name}={value}): พบ {len(points)} record")
+        # ไม่จำกัดความกว้างบน Terminal เพื่อให้ชื่อสถานที่ตั้งแสดงครบ
+        for line in report_module.render_table(headers, rows, max_width=None):
             print(line)
 
     # ------------------------------------------------------------------
@@ -632,24 +647,178 @@ class ChargingStationApp:
     # ------------------------------------------------------------------
     # เมนู 5) Generate Report
     # ------------------------------------------------------------------
-    def generate_report(self, silent: bool = False) -> str:
-        """สร้างรายงานข้อความ report.txt (UTF-8) จากข้อมูลปัจจุบัน
+    def generate_report(self, silent: bool = False) -> Dict[str, str]:
+        """สร้างรายงานทั้ง 3 ชุดเป็นไฟล์ .txt แยกกัน จากข้อมูลปัจจุบัน
 
-        Args:
-            silent: True = ไม่พิมพ์ข้อความ (ใช้ตอนออกจากโปรแกรมอัตโนมัติ)
+        อ่านข้อมูลสดจากทั้ง 3 ไฟล์ไบนารีทุกครั้งที่เรียก จึงสะท้อนผลการ
+        แก้ไข/เพิ่ม/ลบข้อมูลล่าสุดเสมอ (เกณฑ์ข้อ 6)
 
         Returns:
-            พาธไฟล์รายงานที่เขียนสำเร็จ
+            dict {ชื่อไฟล์รายงาน: พาธไฟล์เต็ม}
         """
         points = self.store.read_all(include_deleted=True)
         log_entries = self.audit.read_all()
-        report_module.generate_report(points, log_entries, self.report_path)
+        index_map = self.point_index.as_dict()
+        store_valid = self.store.integrity_check()[0]
+        log_valid = self.audit.integrity_check()[0]
+        index_valid = self.point_index.integrity_check()[0]
+
+        created = reports_module.generate_all_reports(
+            self.data_dir, points, log_entries, index_map,
+            store_valid=store_valid, log_valid=log_valid,
+            index_valid=index_valid,
+            locations=self.location_store.as_dict(),
+        )
         if not silent:
             summary = report_module.compute_summary(points)
-            print(f"   [สำเร็จ] สร้างรายงานแล้วที่ {self.report_path}")
-            print(f"           ระเบียก {summary['total']} รายการ | "
-                  f"เหตุการณ์ใน log {len(log_entries)} รายการ")
-        return self.report_path
+            print(f"   [สำเร็จ] สร้างรายงาน {len(created)} ชุด "
+                  f"(record {summary['total']} รายการ | "
+                  f"เหตุการณ์ใน log {len(log_entries)} รายการ):")
+            for file_name, path in created.items():
+                print(f"      - {file_name}")
+        return created
+
+    def show_report_files(self) -> None:
+        """แสดงรายการไฟล์รายงานที่มีอยู่ในโฟลเดอร์ พร้อมขนาดและจำนวนบรรทัด
+
+        ใช้ตรวจว่ารายงานแต่ละชุดเป็นไฟล์แยกกันจริง (เกณฑ์ข้อ 4)
+        """
+        print("\n--- รายงานที่สร้างไว้ในระบบ ---")
+        found = False
+        for file_name in reports_module.ALL_REPORT_NAMES:
+            path = os.path.join(self.data_dir, file_name)
+            if os.path.exists(path):
+                found = True
+                size = os.path.getsize(path)
+                with open(path, "r", encoding="utf-8") as fh:
+                    lines = fh.read().splitlines()
+                has_spec = any("[COLUMN SPECIFICATION]" in line for line in lines)
+                has_table = any(line.startswith("+") or line.startswith("|")
+                                for line in lines)
+                has_summary = any("[SUMMARY]" in line for line in lines)
+                print(f"   {file_name}")
+                print(f"      ขนาด {size} ไบต์ | {len(lines)} บรรทัด | "
+                      f"แหล่งข้อมูลหลายไฟล์: "
+                      f"{'ใช่' if reports_module.report_uses_multiple_sources(file_name) else 'ไม่ใช่'}")
+                print(f"      ส่วนที่ 1 รายละเอียดหัวตาราง: "
+                      f"{'มี' if has_spec else 'ไม่มี'} | "
+                      f"ส่วนที่ 2 ตาราง: {'มี' if has_table else 'ไม่มี'} | "
+                      f"ส่วนที่ 3 ส่วนสรุป: {'มี' if has_summary else 'ไม่มี'}")
+        if not found:
+            print("   (ยังไม่มีไฟล์รายงาน — เลือกเมนู 5 เพื่อสร้าง)")
+
+    def menu_tools(self) -> None:
+        """แสดงเมนูเครื่องมือ (เมนู 6) — รวมงานที่ต้องทำผ่านเมนูเดียวกัน
+
+        เกณฑ์ข้อ 5: การโหลดข้อมูลตัวอย่างและการซ่อมแซมดัชนีต้องทำได้จาก
+        เมนูนี้ ไม่ต้องรันโปรแกรมแยกอีก
+        """
+        print("\n=== Tools Menu ===")
+        print("   1) โหลดข้อมูลตัวอย่าง (55 record) — เขียนทับข้อมูลเดิม")
+        print("   2) สร้าง index.dat ใหม่จาก charge_points.log")
+        print("   3) ตรวจสอบความถูกต้องของไฟล์ทั้ง 3 ไฟล์")
+        print(f"   4) โหมดจัดความกว้างตาราง (ปัจจุบัน: {report_module.alignment_mode_name()})")
+        choice = validators.ask_menu_choice("   เลือก [1-4] : ", (1, 2, 3, 4))
+
+        if choice == 1:
+            if self.store.count_records() and not validators.ask_yes_no(
+                    "   มีข้อมูลเดิมอยู่ ต้องการเขียนทับหรือไม่?", default=False):
+                print("   [ยกเลิก] ยกเลิกการโหลดข้อมูลตัวอย่าง")
+                return
+            result = seed_data.seed(self.data_dir, force=True, printer=print)
+            # เปิดใหม่เพื่อรีเฟรชแคชของ store / log / index ให้ตรงกับไฟล์ใหม่
+            self.store.refresh_free_slots()
+            self.app_reload()
+            print(f"   [สำเร็จ] โหลดข้อมูลตัวอย่าง {result['records']} record")
+            print("           เลือกเมนู 5 เพื่อสร้างรายงานจากข้อมูลชุดนี้")
+        elif choice == 2:
+            rebuilt = seed_data.rebuild_index(self.log_path, self.index_path)
+            self.point_index.load()
+            print(f"   [สำเร็จ] สร้าง index.dat ใหม่จาก log แล้ว ({rebuilt} รายการ)")
+        elif choice == 3:
+            self.check_file_health()
+        else:
+            self.switch_alignment_mode()
+
+    def switch_alignment_mode(self) -> None:
+        """สลับโหมดจัดความกว้างตาราง แล้วสร้างรายงานใหม่ทันที
+
+        ปัญหาที่แก้
+        ---------
+        สระ/วรรณยุกต์ไทยเป็นอักขระประสม (นับเป็น 1 ตัวอักษร แต่กินพื้นที่ 0 ช่อง)
+        ทำให้ "จำนวนตัวอักษร" กับ "ความกว้างจริง" ของบรรทัดไม่เท่ากัน
+        โปรแกรมที่เปิดไฟล์จึงวางเส้น "|" ไม่ตรงกันได้
+
+        โหมดที่เลือกได้
+        ---------------
+        * smart  — นับสระ/วรรณยุกต์ไทยเป็น 0 ช่อง (ถูกต้องตามมาตรฐาน Unicode)
+          เหมาะกับ Windows Terminal / VS Code / Notepad ที่จัดวางสระไทยได้
+        * simple — นับทุกตัวอักษรเป็น 1 ช่อง
+          เหมาะกับโปรแกรมที่ไม่จัดวางสระไทยหรือไม่มีฟอนต์ไทย (จะเห็นเป็นกล่องสี่เหลี่ยม)
+        """
+        current = report_module.alignment_mode_name()
+        new_mode = "simple" if current == "smart" else "smart"
+        print("\n--- โหมดจัดความกว้างตาราง ---")
+        print(f"   ปัจจุบัน : {current}")
+        print(f"   เปลี่ยนเป็น: {new_mode}")
+        print("   smart  = สระไทยกิน 0 ช่อง (Windows Terminal / VS Code / Notepad)")
+        print("   simple = ทุกตัวอักษรกิน 1 ช่อง (โปรแกรมไม่จัดวางสระไทย)")
+        report_module.set_alignment_mode(new_mode == "smart")
+        print(f"   [สำเร็จ] เปลี่ยนเป็นโหมด {new_mode} แล้ว")
+        print("           เลือกเมนู 5 เพื่อสร้างรายงานใหม่ด้วยโหมดนี้")
+
+    def app_reload(self) -> None:
+        """เปิดไฟล์ทั้ง 3 ใหม่เพื่อรีเฟรชแคชในหน่วยความจำ
+
+        จำเป็นเมื่อไฟล์ถูกเขียนทับจากภายนอก (เช่น โหลดข้อมูลตัวอย่าง)
+        """
+        self.store = storage_module.ChargePointStore(self.data_path)
+        self.audit = logger_module.AuditLog(self.log_path)
+        self.point_index = index_module.PointIndex(self.index_path)
+        self.location_store = storage_module.LocationStore(self.location_path)
+        self.store.refresh_free_slots()
+
+    def check_file_health(self) -> None:
+        """ตรวจความถูกต้องของไฟล์ไบนารีทั้ง 3 ไฟล์และรายงานผล"""
+        print("\n--- ผลตรวจความถูกต้องของไฟล์ ---")
+        for label, checker, path, record_size in (
+            (models.DATA_FILE_NAME, self.store.integrity_check,
+             self.data_path, models.RECORD_SIZE),
+            (models.LOG_FILE_NAME, self.audit.integrity_check,
+             self.log_path, models.LOG_RECORD_SIZE),
+            (models.INDEX_FILE_NAME, self.point_index.integrity_check,
+             self.index_path, models.INDEX_RECORD_SIZE),
+        ):
+            valid, remainder = checker()
+            size = os.path.getsize(path)
+            status = "ผ่าน" if valid else f"ผิดปกติ (เกิน {remainder} ไบต์)"
+            print(f"   {label}: {size} ไบต์ = {size // record_size} record "
+                  f"x {record_size} ไบต์ | {status}")
+
+        problems = self.point_index.verify_against_log(self.audit.read_all())
+        if problems:
+            print(f"   index.dat ไม่สอดคล้องกับ log ({len(problems)} รายการ):")
+            for problem in problems[:5]:
+                print(f"      - {problem}")
+            print("   แนะนำ: เลือก 6) Tools > 2) สร้าง index.dat ใหม่")
+        else:
+            print("   index.dat สอดคล้องกับ charge_points.log ทั้งหมด")
+        print(f"   ช่องว่างที่นำกลับมาใช้ได้: {self.store.free_slot_count()} ช่อง")
+
+    def menu_report(self) -> None:
+        """แสดงเมนูย่อยของการสร้างรายงาน (เมนู 5 ของเมนูหลัก)
+
+        เกณฑ์ข้อ 5: ทุกงานรวมถึงการดูรายงานต้องทำผ่านเมนูชุดเดียวกัน
+        โดยไม่ต้องรันโปรแกรมแยกอีก
+        """
+        print("\n=== Generate Report Menu ===")
+        print("   1) สร้างรายงานทั้ง 3 ชุด (ไฟล์ .txt แยกกัน)")
+        print("   2) แสดงรายการไฟล์รายงานที่มีอยู่")
+        choice = validators.ask_menu_choice("   เลือก [1-2] : ", (1, 2))
+        if choice == 1:
+            self.generate_report()
+        else:
+            self.show_report_files()
 
     # ------------------------------------------------------------------
     # เมนูหลัก + การออกอย่างปลอดภัย
@@ -665,7 +834,8 @@ class ChargingStationApp:
         print("  2) Update (แก้ไข)")
         print("  3) Delete (ลบแบบ soft delete)")
         print("  4) View (ดู)")
-        print("  5) Generate Report (.txt)")
+        print("  5) Generate Report (.txt x3)")
+        print("  6) Tools (ข้อมูลตัวอย่าง / ซ่อมดัชนี / ตรวจไฟล์)")
         print("  0) Exit (ออกจากโปรแกรม)")
 
     def run(self) -> int:
@@ -681,7 +851,7 @@ class ChargingStationApp:
             self.show_menu()
             try:
                 choice = validators.ask_menu_choice(
-                    "เลือกเมนู [0-5] : ", (0, 1, 2, 3, 4, 5))
+                    "เลือกเมนู [0-6] : ", (0, 1, 2, 3, 4, 5, 6))
                 if choice == 1:
                     self.add_point()
                 elif choice == 2:
@@ -691,7 +861,9 @@ class ChargingStationApp:
                 elif choice == 4:
                     self.menu_view()
                 elif choice == 5:
-                    self.generate_report()
+                    self.menu_report()
+                elif choice == 6:
+                    self.menu_tools()
                 else:
                     # เลือก 0 = ออกอย่างปลอดภัย (สร้างรายงาน + flush + os.fsync)
                     self._shutdown()
@@ -726,8 +898,9 @@ class ChargingStationApp:
         """
         print("\n   [ออกจากโปรแกรม] กำลังสร้างรายงานสุดท้ายและซีลข้อมูล...")
         try:
-            self.generate_report(silent=True)
-            print(f"   [บันทึกรายงาน] {self.report_path}")
+            created = self.generate_report(silent=True)
+            for file_name in created:
+                print(f"   [บันทึกรายงาน] {file_name}")
         except (OSError, ValueError) as exc:
             print(f"   [คำเตือน] สร้างรายงานไม่สำเร็จ: {exc}")
 
@@ -809,7 +982,7 @@ def print_banner(app: ChargingStationApp) -> None:
         print(f"  {message}")
 
     summary_total = app.store.count_records()
-    print(f"  ข้อมูลปัจจุบัน : {summary_total} ระเบียก | "
+    print(f"  ข้อมูลปัจจุบัน : {summary_total} record | "
           f"log {app.audit.count()} เหตุการณ์ | "
           f"index {app.point_index.count()} รายการ | "
           f"ช่องว่าง {app.store.free_slot_count()}")
@@ -831,7 +1004,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--data-dir", default=".",
                         help="โฟลเดอร์เก็บไฟล์ข้อมูล (ค่าเริ่มต้น: โฟลเดอร์ปัจจุบัน)")
     parser.add_argument("--seed", action="store_true",
-                        help="สร้างข้อมูลตัวอย่าง (>50 ระเบียก) ก่อนเข้าเมนู")
+                        help="สร้างข้อมูลตัวอย่าง (>50 record) ก่อนเข้าเมนู")
     parser.add_argument("--reset", action="store_true",
                         help="ลบไฟล์ข้อมูลทั้งหมดก่อนเริ่ม (เริ่มใหม่แบบว่าง)")
     parser.add_argument("--rebuild-index", action="store_true",
@@ -840,6 +1013,13 @@ def build_parser() -> argparse.ArgumentParser:
                         help="สร้างรายงาน .txt จากข้อมูลปัจจุบันแล้วออก")
     parser.add_argument("--spec", action="store_true",
                         help="แสดงสเปกระเบียนของไฟล์ไบนารีทั้ง 3 ไฟล์แล้วออก")
+    parser.add_argument("--align", choices=("smart", "simple"),
+                        default="smart",
+                        help="วิธีจัดความกว้างตารางในรายงาน: "
+                             "smart = นับสระ/วรรณยุกต์ไทยเป็น 0 ช่อง "
+                             "(ถูกต้องใน Terminal/VS Code/Notepad), "
+                             "simple = นับทุกตัวอักษรเป็น 1 ช่อง "
+                             "(ใช้เมื่อเปิดด้วยโปรแกรมที่ไม่จัดวางสระไทย)")
     parser.add_argument("--version", action="version",
                         version=f"EV Charging Station Booking System "
                                 f"{models.APP_VERSION}")
@@ -847,9 +1027,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def reset_data_dir(data_dir: str) -> None:
-    """ลบไฟล์ข้อมูลทั้งหมดในโฟลเดอร์ (ใช้กับ --reset)"""
-    for name in (models.DATA_FILE_NAME, models.LOG_FILE_NAME,
-                 models.INDEX_FILE_NAME, models.REPORT_FILE_NAME):
+    """ลบไฟล์ข้อมูลและไฟล์รายงานทั้งหมดในโฟลเดอร์ (ใช้กับ --reset)"""
+    names = [models.DATA_FILE_NAME, models.LOG_FILE_NAME,
+             models.INDEX_FILE_NAME, models.REPORT_FILE_NAME,
+             models.LOCATION_FILE_NAME]
+    names.extend(reports_module.ALL_REPORT_NAMES)
+    for name in names:
         path = os.path.join(data_dir, name)
         if os.path.exists(path):
             os.remove(path)
@@ -866,6 +1049,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     configure_console_encoding()
 
     args = build_parser().parse_args(argv)
+
+    # เลือกวิธีจัดความกว้างตารางก่อนสร้างรายงาน (ต้องทำก่อนทุกการเรียกรายงาน)
+    report_module.set_alignment_mode(args.align == "smart")
 
     # ตรวจขนาดระเบียนเทียบกับ struct.calcsize ตอนเริ่มโปรแกรม
     models.verify_record_sizes()

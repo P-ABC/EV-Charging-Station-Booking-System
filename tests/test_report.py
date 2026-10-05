@@ -122,7 +122,7 @@ class TestStatistics(unittest.TestCase):
     """ทดสอบการคำนวณสถิติจากชุดข้อมูลตัวอย่าง 1001-1010"""
 
     def setUp(self):
-        """เตรียมระเบียก 10 ระเบียกตามข้อมูลตัวอย่างในรายงาน"""
+        """เตรียม record 10 record ตามข้อมูลตัวอย่างในรายงาน"""
         self.points = seed_data.specs_to_charge_points(seed_data.MAIN_POINTS)
 
     def test_summary_matches_expected_sample(self):
@@ -149,10 +149,10 @@ class TestStatistics(unittest.TestCase):
         self.assertAlmostEqual(stats["avg"], 7.36, places=2)
 
     def test_deleted_record_price_excluded_from_stats(self):
-        """ราคาของระเบียกที่ถูกลบต้องไม่ถูกนับในสถิติราคา
+        """ราคาของ record ที่ถูกลบต้องไม่ถูกนับในสถิติราคา
 
-        ระเบียก 1010 ถูก soft delete และมีราคา 9.00 ซึ่งไม่ควรทำให้
-        ค่าเฉลี่ยของ 9 ระเบียกที่ Active เพี้ยนจาก 7.36
+        record 1010 ถูก soft delete และมีราคา 9.00 ซึ่งไม่ควรทำให้
+        ค่าเฉลี่ยของ 9 record ที่ Active เพี้ยนจาก 7.36
         """
         active_prices = [p.price_per_kwh for p in self.points
                          if not p.is_deleted and p.status == 1]
@@ -161,7 +161,7 @@ class TestStatistics(unittest.TestCase):
                                places=2)
 
     def test_inactive_record_excluded_from_price_stats(self):
-        """ระเบียก status=0 ต้องไม่ถูกนับในสถิติราคา"""
+        """record status=0 ต้องไม่ถูกนับในสถิติราคา"""
         active = [p for p in self.points if p.status == 1 and not p.is_deleted]
         self.assertEqual(len(active), 9)
 
@@ -243,7 +243,7 @@ class TestBuildAndWriteReport(unittest.TestCase):
         content = report.build_report(self.points, self.log_entries)
         self.assertIn("| 1001 |", content)
         self.assertIn("| 1010 |", content)
-        self.assertIn("Deleted", content)      # ระเบียกที่ถูก soft delete
+        self.assertIn("Deleted", content)      # record ที่ถูก soft delete
 
     def test_report_recent_activity_limited_to_five(self):
         """กิจกรรมล่าสุดต้องแสดงไม่เกิน 5 รายการ เรียงใหม่ไปเก่า"""
@@ -301,7 +301,7 @@ class TestBuildAndWriteReport(unittest.TestCase):
         with open(self.report_path, "r", encoding="utf-8") as fh:
             saved = fh.read()
         self.assertNotIn("\ufffd", saved, "ห้ามมีอักขระเพี้ยนจากการตัด UTF-8")
-        # ทุกระเบียกต้องมี location ที่ถอดรหัสได้ (ไม่ว่างทั้งหมด)
+        # ทุก record ต้องมี location ที่ถอดรหัสได้ (ไม่ว่างทั้งหมด)
         for line in saved.splitlines():
             if line.startswith("| 10"):
                 self.assertNotIn("\ufffd", line)

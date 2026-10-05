@@ -1,7 +1,7 @@
-"""tests/test_models.py — ทดสอบการ pack/unpack ของระเบียกทั้ง 3 ไฟล์
+"""tests/test_models.py — ทดสอบการ pack/unpack ของ record ทั้ง 3 ไฟล์
 
 เน้นยืนยันว่า:
-* ขนาดระเบียกตรงกับสเปก (82 / 24 / 8 ไบต์) และเป็น Little-Endian
+* ขนาด record ตรงกับสเปก (82 / 24 / 8 ไบต์) และเป็น Little-Endian
 * round-trip ข้อมูลไม่เสียหาย (ยกเว้นความแม่นยำ float32 ที่ยอมรับได้)
 * สตริงถูก pad/ตัดตามขนาดฟิลด์ โดยไม่ตัดกลางอักขระ UTF-8
 """
@@ -14,7 +14,7 @@ import models
 
 
 class TestRecordSizes(unittest.TestCase):
-    """ตรวจขนาดระเบียกเทียบกับ struct.calcsize และสเปก"""
+    """ตรวจขนาด record เทียบกับ struct.calcsize และสเปก"""
 
     def test_charge_point_record_is_82_bytes(self):
         """charge_points.dat: struct '<l10s30s10sfflllll' ต้องเป็น 82 ไบต์"""
@@ -41,15 +41,15 @@ class TestRecordSizes(unittest.TestCase):
             self.assertTrue(fmt.startswith("<"), f"{fmt} ต้องเป็น Little-Endian")
 
     def test_verify_record_sizes_passes(self):
-        """ฟังก์ชันตรวจขนาดระเบียกต้องผ่าน (ไม่ raise)"""
+        """ฟังก์ชันตรวจขนาด record ต้องผ่าน (ไม่ raise)"""
         models.verify_record_sizes()      # ไม่ควรเกิด RuntimeError
 
 
 class TestChargePointPackUnpack(unittest.TestCase):
-    """ทดสอบ pack/unpack ของระเบียกหัวชาร์จ"""
+    """ทดสอบ pack/unpack ของ record หัวชาร์จ"""
 
     def _sample(self, **overrides) -> models.ChargePoint:
-        """สร้างระเบียกตัวอย่างที่ใช้ร่วมกันในเทสต์นี้"""
+        """สร้าง record ตัวอย่างที่ใช้ร่วมกันในเทสต์นี้"""
         data = {
             "point_id": 1001,
             "station_code": "EVS-0001",
@@ -126,7 +126,7 @@ class TestChargePointPackUnpack(unittest.TestCase):
             models.unpack_charge_point(b"\x00" * 83)
 
     def test_decode_from_bytesio(self):
-        """ถอดรหัสระเบียกจาก io.BytesIO ได้ (ใช้จริงใน unit test)"""
+        """ถอดรหัส record จาก io.BytesIO ได้ (ใช้จริงใน unit test)"""
         point = self._sample()
         buffer = io.BytesIO(point.to_bytes())
         restored = models.unpack_charge_point(buffer.read())
@@ -201,7 +201,7 @@ class TestLogAndIndexPack(unittest.TestCase):
     """ทดสอบ pack/unpack ของ audit log (24 ไบต์) และดัชนี (8 ไบต์)"""
 
     def test_log_entry_size_and_round_trip(self):
-        """ระเบียก log ต้อง 24 ไบต์ และ round-trip ได้ครบ"""
+        """record log ต้อง 24 ไบต์ และ round-trip ได้ครบ"""
         entry = models.LogEntry(ts=1_700_000_000, op_code=models.OP_UPDATE,
                                 point_id=1001, status_after=1,
                                 is_booked_after=1, price_after_thb=7.25)
@@ -243,7 +243,7 @@ class TestLogAndIndexPack(unittest.TestCase):
         self.assertEqual(entry.status_text, "Deleted")
 
     def test_index_entry_size_and_round_trip(self):
-        """ระเบียกดัชนีต้อง 8 ไบต์ และ round-trip ได้ครบ"""
+        """record ดัชนีต้อง 8 ไบต์ และ round-trip ได้ครบ"""
         raw = models.pack_index_entry(models.IndexEntry(point_id=1001,
                                                        log_seq=42))
         self.assertEqual(len(raw), 8)
