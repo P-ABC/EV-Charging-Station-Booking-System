@@ -14,6 +14,9 @@
 
 ทุกไฟล์อ้างอิงข้อมูลจาก 3 ไฟล์ไบนารีเสมอ (เกณฑ์ข้อ 3):
 ``charge_points.dat`` + ``charge_points.log`` + ``index.dat``
+
+ข้อความในตารางเป็นภาษาอังกฤษเพื่อให้แนวคอลัมน์ตรงกันใน text editors
+ที่จัดวางสระและวรรณยุกต์ภาษาไทยต่างกัน
 """
 
 from __future__ import annotations
@@ -24,10 +27,13 @@ from typing import Dict, List, Optional, Sequence
 import models
 from report import (
     RECENT_ACTIVITY_LIMIT,
+    alignment_mode_name,
     compute_summary,
     format_timestamp,
     measure,
     render_table,
+    set_alignment_mode,
+    truncate_to_width,
 )
 
 # ---------------------------------------------------------------------------
@@ -43,9 +49,24 @@ SOURCE_LOG_FILE = models.LOG_FILE_NAME        # charge_points.log
 SOURCE_INDEX_FILE = models.INDEX_FILE_NAME    # index.dat
 
 # ความกว้างสูงสุดของตารางข้อมูลหัวชาร์จ (รายงานที่ 1)
-# ตารางนี้รวมข้อมูลครบทั้ง 10 คอลัมน์ไว้ในตารางเดียว จึงต้องกว้างกว่าตารางอื่น
-# เพื่อให้ชื่อสถานที่ตั้งแบบเต็มและข้อมูลทุกฟิลด์แสดงได้ครบโดยไม่ถูกตัด
+# ชื่อสถานที่ที่ยาวกว่านี้จะแสดงฉบับเต็มแยกใต้ตาราง
 MAIN_TABLE_MAX_WIDTH = 150
+MAIN_TABLE_LOCATION_WIDTH = 32
+
+_LOCATION_LABELS = {
+    "สยามพารากอน ชั้น B1": "Siam Paragon, Level B1",
+    "เซ็นทรัลเวิลด์ ลาน P2": "CentralWorld, Parking P2",
+    "ICONSIAM ชั้น G": "ICONSIAM, Level G",
+    "เมกาบางนา โซน A": "Mega Bangna, Zone A",
+    "เซ็นทรัลพระราม 9": "Central Rama 9",
+    "บิกกิ้ง สาทร ชั้น 2": "Biking Sathorn, Level 2",
+    "ลาดพร้าว ไทยรัฐ 2": "Lat Phrao, Thairath 2",
+    "เอเชีย เซนเทอร์ ชั้น G": "Asia Center, Level G",
+    "เซ็นทรัล พหมโพธิยา": "Central Phom Phothiya",
+    "พารากอน โครงการเก่า": "Paragon, Former Project",
+    "สถานีชาร์จไฟฟ้าสยามพารากอนชั้นใต้ดินโครงการใหม่และลานจอดรถ":
+        "Siam Paragon EV Station, New Basement Project and Parking Lot",
+}
 
 
 def _full_location(point: models.ChargePoint,
@@ -68,6 +89,11 @@ def _full_location(point: models.ChargePoint,
         if full:
             return full
     return point.location
+
+
+def english_location_label(location: str) -> Optional[str]:
+    """Return a known English location label, or None for custom locations."""
+    return _LOCATION_LABELS.get(location)
 
 
 def _header(data_dir: str) -> List[str]:
@@ -110,15 +136,15 @@ def _footer_section(summary_rows: Sequence[Sequence[str]],
         summary_rows: แถวสรุปตัวเลข
         check_rows: แถวผลการตรวจสอบความสอดคล้อง (Check / Expected / Result)
     """
-    summary_table = render_table(["รายการ", "ค่า"], list(summary_rows))
-    check_table = render_table(["รายการตรวจสอบ", "ค่าที่คาดหวัง", "ผลลัพธ์"],
+    summary_table = render_table(["Item", "Value"], list(summary_rows))
+    check_table = render_table(["Check", "Expected", "Result"],
                                list(check_rows))
     lines: List[str] = []
-    lines.append("[SUMMARY] ส่วนสรุป")
+    lines.append("[SUMMARY] Summary")
     lines.append("-" * 62)
     lines.extend(summary_table)
     lines.append("")
-    lines.append("[CONSISTENCY CHECK] ผลการตรวจสอบความสอดคล้องของข้อมูล")
+    lines.append("[CONSISTENCY CHECK] Data consistency checks")
     lines.append("-" * 62)
     lines.extend(check_table)
     return lines
@@ -202,7 +228,7 @@ def build_report_points(data_dir: str,
     """สร้างรายงานชุดที่ 1: สถานะหัวชาร์จรายหัว (report_points.txt)
 
     แหล่งข้อมูล: charge_points.dat + index.dat + charge_points.log (3 ไฟล์)
-    คอลัมน์ LogSeq มาจาก index.dat ทำให้รายงานนี้ไม่ได้มาจากไฟล์เดียว
+    จำนวนระเบียนใน index.dat แสดงในส่วนสรุปและตรวจสอบ
 
     พารามิเตอร์ store_valid/log_valid/index_valid รับไว้เพื่อให้
     ฟังก์ชันทั้ง 3 ชุดมีลายเซ็นเหมือนกัน (ใช้โดย generate_all_reports)
@@ -213,47 +239,56 @@ def build_report_points(data_dir: str,
     lines.append("")
 
     # ---- ตารางข้อมูลจริง --------------------------------------------
-    lines.append("[TABLE] ตารางข้อมูลหัวชาร์จทั้งหมด (รวมรายการที่ถูกลบแล้ว)")
+    lines.append("[TABLE] All charging points (including deleted records)")
     lines.append("-" * 62)
     rows = []
+    long_locations = []
     for point in points:
+        location = _full_location(point, locations)
+        english_location = english_location_label(location)
+        table_location = english_location or "See details"
+        if english_location is None or measure(table_location) > MAIN_TABLE_LOCATION_WIDTH:
+            long_locations.append(f"  PtID {point.point_id}: {english_location or location}")
         rows.append([
             str(point.point_id),
             point.station_code,
-            _full_location(point, locations),
+            truncate_to_width(table_location, MAIN_TABLE_LOCATION_WIDTH),
             point.plug_type,
             f"{point.power_kw:.1f}",
             f"{point.price_per_kwh:.2f}",
             point.status_text,
             point.booked_text,
-            str(index_map.get(point.point_id, "-")),
             format_timestamp(point.updated_at).replace(" (+07:00)", ""),
         ])
     # รวมข้อมูลทั้งหมดไว้ตารางเดียว
     lines.extend(render_table(
         ["PtID", "Station", "Location", "Plug", "Power", "Price", "Status",
-         "Booked", "LogSeq", "Updated"], rows,
+         "Booked", "Updated"], rows,
         max_width=MAIN_TABLE_MAX_WIDTH))
+    if long_locations:
+        lines.append("")
+        lines.append("[LOCATION DETAILS] Full location names")
+        lines.extend(long_locations)
     lines.append("")
 
     # ---- ส่วนสรุป ---------------------------------------------------
-    # ต้องแยก "Inactive" ออกมาชัดเจน เพราะสมการ
-    # "Active + Deleted = Total" ไม่เป็นจริงเมื่อมีรายการที่ปิดซ่อมบำรุง
+    # Inactive points must be counted separately so the status totals reconcile.
     inactive = [p for p in points if not p.is_deleted and p.status != 1]
-    # จำนวนที่ถูกจอง "และยัง Active" เท่านั้น จึงจะบวกกับ Available ได้พอดี
+    # Only booked active points reconcile with the available count.
     booked_active = [p for p in points
                      if not p.is_deleted and p.status == 1 and p.is_booked == 1]
 
     summary_rows = [
         ["Total Points (records)", str(summary["total"])],
         ["Active Points", str(summary["active"])],
-        ["Inactive Points (ปิดซ่อมบำรุง)", str(len(inactive))],
+        ["Inactive Points (maintenance)", str(len(inactive))],
         ["Deleted Points (soft delete)", str(summary["deleted"])],
-        ["Currently Booked (ทุกสถานะ)", str(summary["booked"])],
-        ["Booked ที่ยัง Active", str(len(booked_active))],
+        ["Currently Booked (all statuses)", str(summary["booked"])],
+        ["Booked Active Points", str(len(booked_active))],
         ["Available Now (Active & not booked)", str(summary["available"])],
         ["Free Slots (reuseable)", str(summary["free_slots"])],
-        ["ไฟล์ต้นทางที่ใช้ประกอบรายงานนี้",
+        [f"Records in {SOURCE_INDEX_FILE}", f"{len(index_map)} records"],
+        ["Source files",
          f"{SOURCE_POINT_FILE}, {SOURCE_LOG_FILE}, {SOURCE_INDEX_FILE}"],
     ]
 
@@ -266,32 +301,32 @@ def build_report_points(data_dir: str,
     stale_index = sorted((set(index_map) - active_ids) - set(missing_index))
     expected_count = len(active_ids)
     check_rows = [
-        ["จำนวน record ในตาราง = Total Points",
+        ["Table record count = Total Points",
          f"{len(points)} = {summary['total']}",
-         "ผ่าน" if len(points) == summary["total"] else "ไม่ผ่าน"],
+         "PASS" if len(points) == summary["total"] else "FAIL"],
         ["Active + Inactive + Deleted = Total",
          f"{summary['active']} + {len(inactive)} + {summary['deleted']}"
          f" = {summary['total']}",
-         "ผ่าน" if summary["active"] + len(inactive)
-         + summary["deleted"] == summary["total"] else "ไม่ผ่าน"],
-        ["Booked(Active) + Available = Active",
+         "PASS" if summary["active"] + len(inactive)
+         + summary["deleted"] == summary["total"] else "FAIL"],
+        ["Booked Active + Available = Active",
          f"{len(booked_active)} + {summary['available']}"
          f" = {summary['active']}",
-         "ผ่าน" if len(booked_active) + summary["available"]
-         == summary["active"] else "ไม่ผ่าน"],
-        ["Free Slots = จำนวน record ที่ถูก soft delete",
+         "PASS" if len(booked_active) + summary["available"]
+         == summary["active"] else "FAIL"],
+        ["Free Slots = soft-deleted record count",
          f"{summary['free_slots']} = {summary['deleted']}",
-         "ผ่าน" if summary["free_slots"] == summary["deleted"]
-         else "ไม่ผ่าน"],
-        ["point_id ที่ยังไม่ถูกลบ มี record ใน index.dat ครบทุกตัว",
-         f"{expected_count - len(missing_index)} รายการ",
-         "ผ่าน" if not missing_index
-         else f"ไม่ผ่าน (ขาด {len(missing_index)})"],
-        ["index.dat มี record อย่างน้อยเท่าจำนวนรายการที่ยังไม่ถูกลบ",
+         "PASS" if summary["free_slots"] == summary["deleted"]
+         else "FAIL"],
+        ["Every active point_id has an index.dat record",
+         f"{expected_count - len(missing_index)} records",
+         "PASS" if not missing_index
+         else f"FAIL ({len(missing_index)} missing)"],
+        ["index.dat record count >= active point count",
          f"{len(index_map)} >= {expected_count}",
-         "ผ่าน" if len(index_map) >= expected_count else "ไม่ผ่าน"],
-        ["(ข้อมูลประกอบ) record ใน index.dat ของรหัสที่ถูกลบแล้ว/ช่องถูกใช้ทับ",
-         f"{len(stale_index)} รายการ", "ข้อมูล"],
+         "PASS" if len(index_map) >= expected_count else "FAIL"],
+        ["(Info) Deleted or reused index.dat records",
+         f"{len(stale_index)} records", "INFO"],
     ]
     lines.extend(_footer_section(summary_rows, check_rows))
     return lines
@@ -341,36 +376,36 @@ def build_report_stats(data_dir: str,
     lines = _header(data_dir)
     lines.append("")
 
-    # ---- TABLE 1: สถิติราคาและกำลังไฟ --------------------------------
-    lines.append("[TABLE 1] สถิติราคาและกำลังไฟ (นับเฉพาะ Active ที่ไม่ถูกลบ)")
+    # ---- TABLE 1: Price and power statistics --------------------------
+    lines.append("[TABLE 1] Price and power statistics (active, non-deleted only)")
     lines.append("-" * 62)
     stat_rows = [
-        ["จำนวนรายการ", str(count), str(count)],
-        ["ค่าต่ำสุด (Min)", f"{min(prices):.2f}" if prices else "-",
+        ["Record count", str(count), str(count)],
+        ["Minimum", f"{min(prices):.2f}" if prices else "-",
          f"{stats['min']:.1f}"],
-        ["ค่าสูงสุด (Max)", f"{max(prices):.2f}" if prices else "-",
+        ["Maximum", f"{max(prices):.2f}" if prices else "-",
          f"{stats['max']:.1f}"],
-        ["ค่าเฉลี่ย (Avg)", f"{stats['price_avg']:.2f}",
+        ["Average", f"{stats['price_avg']:.2f}",
          f"{stats['avg']:.1f}"],
     ]
-    lines.extend(render_table(["สถิติ", "ราคา (THB/kWh)", "กำลังไฟ (kW)"],
+    lines.extend(render_table(["Statistic", "Price (THB/kWh)", "Power (kW)"],
                               stat_rows))
     lines.append("")
 
-    # ---- TABLE 2: จำนวนหัวชาร์จแยกตามประเภทหัว -------------------------
-    lines.append("[TABLE 2] จำนวนหัวชาร์จแยกตามประเภทหัว (นับเฉพาะ Active)")
+    # ---- TABLE 2: Active charging points by connector ------------------
+    lines.append("[TABLE 2] Active charging points by connector type")
     lines.append("-" * 62)
     plug_rows = []
     for plug in ("CCS2", "Type2", "CHAdeMO", "GB-T"):
         plug_count = plug_counts.get(plug, 0)
         percent = (plug_count / count * 100) if count else 0.0
         plug_rows.append([plug, str(plug_count), f"{percent:.1f}"])
-    lines.extend(render_table(["ประเภทหัว", "จำนวน", "สัดส่วน (%)"], plug_rows))
+    lines.extend(render_table(["Connector", "Count", "Share (%)"], plug_rows))
     lines.append("")
 
-    # ---- TABLE 3: กิจกรรมล่าสุดจาก log --------------------------------
-    lines.append(f"[TABLE 3] กิจกรรมล่าสุดจาก {SOURCE_LOG_FILE} "
-                 f"({len(recent)} รายการล่าสุด)")
+    # ---- TABLE 3: Recent log activity ----------------------------------
+    lines.append(f"[TABLE 3] Recent activity from {SOURCE_LOG_FILE} "
+                 f"(latest {len(recent)} records)")
     lines.append("-" * 62)
     recent_rows = []
     for entry in sorted(recent, key=lambda item: item.ts, reverse=True):
@@ -382,11 +417,11 @@ def build_report_stats(data_dir: str,
             point.status_text if point else "-",
             point.booked_text if point else "-",
             f"{point.price_per_kwh:.2f}" if point else "-",
-            "พบใน index" if entry.point_id in index_map else "ไม่พบใน index",
+            "Found in index" if entry.point_id in index_map else "Missing from index",
         ])
     lines.extend(render_table(
         ["Timestamp", "Operation", "PtID", "Status", "Booked", "Price",
-         "ตรวจสอบ index"], recent_rows))
+         "Index check"], recent_rows))
     lines.append("")
 
     # ---- ส่วนสรุป -----------------------------------------------------
@@ -394,36 +429,36 @@ def build_report_stats(data_dir: str,
     recent_ids_found = sum(1 for entry in recent
                            if entry.point_id in index_map)
     summary_rows = [
-        ["รายการที่นำมาคำนวณสถิติ (Active)", str(count)],
-        ["ราคาเฉลี่ย (THB/kWh)", f"{stats['price_avg']:.2f}"],
-        ["กำลังไฟเฉลี่ย (kW)", f"{stats['avg']:.1f}"],
-        ["รวมหัวชาร์จตามประเภทหัว", str(sum(plug_counts.values()))],
-        ["รวมเหตุการณ์ใน log", str(len(log_entries))],
+        ["Records used for statistics (active)", str(count)],
+        ["Average price (THB/kWh)", f"{stats['price_avg']:.2f}"],
+        ["Average power (kW)", f"{stats['avg']:.1f}"],
+        ["Total active connectors", str(sum(plug_counts.values()))],
+        ["Total log events", str(len(log_entries))],
         ["ADD / UPDATE / DELETE / VIEW",
          f"{op_counts[models.OP_ADD]} / {op_counts[models.OP_UPDATE]} / "
          f"{op_counts[models.OP_DELETE]} / {op_counts[models.OP_VIEW]}"],
-        [f"record ใน {SOURCE_INDEX_FILE}", f"{len(index_map)} รายการ"],
-        ["ไฟล์ต้นทางที่ใช้ประกอบรายงานนี้",
+        [f"Records in {SOURCE_INDEX_FILE}", f"{len(index_map)} records"],
+        ["Source files",
          f"{SOURCE_POINT_FILE}, {SOURCE_LOG_FILE}, {SOURCE_INDEX_FILE}"],
     ]
     check_rows = [
-        ["ผลรวมจำนวนตามประเภทหัว = จำนวน Active",
+        ["Connector counts sum = active record count",
          f"{sum(plug_counts.values())} = {count}",
-         "ผ่าน" if sum(plug_counts.values()) == count else "ไม่ผ่าน"],
-        ["รวม op_code = จำนวนเหตุการณ์ใน log",
+         "PASS" if sum(plug_counts.values()) == count else "FAIL"],
+        ["Operation counts sum = log event count",
          f"{total_ops} = {len(log_entries)}",
-         "ผ่าน" if total_ops == len(log_entries) else "ไม่ผ่าน"],
-        ["ค่าเฉลี่ยที่แสดง = คำนวณจากรายการจริง",
+         "PASS" if total_ops == len(log_entries) else "FAIL"],
+        ["Displayed average matches source records",
          f"{stats['price_avg']:.2f}",
-         "ผ่าน" if prices else "ไม่ผ่าน (ไม่มีข้อมูล)"],
-        ["เหตุการณ์ล่าสุดทุกรายการมีใน index.dat",
+         "PASS" if prices else "FAIL (no data)"],
+        ["All recent events exist in index.dat",
          f"{recent_ids_found} = {len(recent)}",
-         "ผ่าน" if recent_ids_found == len(recent) else "ไม่ผ่าน"],
-        ["ราคาต่ำสุด <= เฉลี่ย <= ราคาสูงสุด",
+         "PASS" if recent_ids_found == len(recent) else "FAIL"],
+        ["Minimum price <= average <= maximum price",
          f"{min(prices):.2f} <= {stats['price_avg']:.2f} <= {max(prices):.2f}"
          if prices else "-",
-         "ผ่าน" if prices and min(prices) <= stats["price_avg"] <= max(prices)
-         else "ไม่ผ่าน (ไม่มีข้อมูล)"],
+         "PASS" if prices and min(prices) <= stats["price_avg"] <= max(prices)
+         else "FAIL (no data)"],
     ]
     lines.extend(_footer_section(summary_rows, check_rows))
     return lines
@@ -446,28 +481,28 @@ def build_report_system(data_dir: str,
     lines = _header(data_dir)
     lines.append("")
 
-    # ---- TABLE 1: สถานะไฟล์ไบนารีทั้ง 3 ไฟล์ ------------------------
-    lines.append("[TABLE 1] สถานะไฟล์ไบนารีทั้ง 3 ไฟล์")
+    # ---- TABLE 1: Binary file status -----------------------------------
+    lines.append("[TABLE 1] Binary file status")
     lines.append("-" * 62)
     file_rows = []
     for label, file_name, struct_fmt, record_size, count, valid in (
-        ("ข้อมูลหลัก", SOURCE_POINT_FILE, models.CHARGE_POINT_FORMAT,
+        ("Primary data", SOURCE_POINT_FILE, models.CHARGE_POINT_FORMAT,
          models.RECORD_SIZE, len(points), store_valid),
         ("audit log", SOURCE_LOG_FILE, models.LOG_FORMAT,
          models.LOG_RECORD_SIZE, len(log_entries), log_valid),
-        ("ดัชนี", SOURCE_INDEX_FILE, models.INDEX_FORMAT,
+        ("Index", SOURCE_INDEX_FILE, models.INDEX_FORMAT,
          models.INDEX_RECORD_SIZE, len(index_map), index_valid),
     ):
         file_rows.append([
-            label, file_name, struct_fmt, f"{record_size} ไบต์",
+            label, file_name, struct_fmt, f"{record_size} bytes",
             str(count),
-            "ผ่าน" if valid else "ผิดปกติ",
+            "PASS" if valid else "INVALID",
         ])
     # ตัดคอลัมน์ "ขนาดไฟล์" ออก เพราะเป็นผลคูณของ 2 คอลัมน์ก่อนหน้า
     # ทำให้ตารางกว้างลงจนไม่ต้องถูกตัดข้อมูลสำคัญ
     lines.extend(render_table(
-        ["ประเภท", "ไฟล์", "Struct format", "ขนาด/record", "จำนวน",
-         "สถานะ"], file_rows))
+        ["Type", "File", "Struct format", "Bytes/record", "Count",
+         "Status"], file_rows))
     lines.append("")
 
     # ตรวจความสอดคล้องระหว่างไฟล์: index กับ log
@@ -484,55 +519,55 @@ def build_report_system(data_dir: str,
 
     # แสดงตารางเฉพาะเมื่อ "มีปัญหาจริง" เท่านั้น
     if mismatch or index_only or log_only:
-        lines.append(f"[TABLE 2] ผลการเทียบข้อมูลระหว่าง {SOURCE_INDEX_FILE} "
-                     f"กับ {SOURCE_LOG_FILE}")
+        lines.append(f"[TABLE 2] Compare {SOURCE_INDEX_FILE} "
+                     f"with {SOURCE_LOG_FILE}")
         lines.append("-" * 62)
         diff_rows = []
         for pid, in_index, in_log in mismatch[:10]:
-            diff_rows.append([str(pid), "ไม่ตรงกัน", str(in_index), str(in_log),
-                              "ควรสร้างดัชนีใหม่จาก log"])
+            diff_rows.append([str(pid), "Mismatch", str(in_index), str(in_log),
+                              "Rebuild index from log"])
         for pid in index_only[:10]:
-            diff_rows.append([str(pid), "มีใน index แต่ไม่มีใน log",
-                              str(index_map[pid]), "-", "ต้องตรวจสอบไฟล์ log"])
+            diff_rows.append([str(pid), "In index, missing from log",
+                              str(index_map[pid]), "-", "Check log file"])
         for pid in log_only[:10]:
-            diff_rows.append([str(pid), "มีใน log แต่ไม่มีใน index", "-",
+            diff_rows.append([str(pid), "In log, missing from index", "-",
                               str(latest_seq[pid]),
-                              "ต้องสร้างดัชนีใหม่จาก log"])
+                              "Rebuild index from log"])
         lines.extend(render_table(
-            ["point_id", "ปัญหา", "log_seq ใน index", "log_seq ใน log",
-             "คำแนะนำ"], diff_rows))
+            ["point_id", "Issue", "log_seq in index", "log_seq in log",
+             "Recommendation"], diff_rows))
         lines.append("")
 
     # ---- ส่วนสรุป -----------------------------------------------------
 
-# ---- ส่วนสรุป -----------------------------------------------------
+# ---- Summary ----------------------------------------------------------
     deleted = [p for p in points if p.is_deleted]
     summary_rows = [
-        [f"record ใน {SOURCE_POINT_FILE}", f"{len(points)} record"],
-        ["record ที่ถูก soft delete", f"{len(deleted)} record"],
-        ["ช่องว่างที่นำกลับมาใช้ได้ (Free Slots)", f"{len(deleted)} ช่อง"],
-        [f"เหตุการณ์ใน {SOURCE_LOG_FILE}", f"{len(log_entries)} record"],
-        [f"record ใน {SOURCE_INDEX_FILE}", f"{len(index_map)} record"],
-        ["point_id ที่ log_seq ไม่ตรงกัน", f"{len(mismatch)} รายการ"],
-        ["Endianness ที่ใช้ทั้งระบบ", models.BYTE_ORDER_LABEL],
-        [f"ไฟล์ต้นทางที่ใช้ประกอบรายงานนี้",
+        [f"Records in {SOURCE_POINT_FILE}", f"{len(points)} records"],
+        ["Soft-deleted records", f"{len(deleted)} records"],
+        ["Reusable free slots", str(len(deleted))],
+        [f"Events in {SOURCE_LOG_FILE}", f"{len(log_entries)} records"],
+        [f"Records in {SOURCE_INDEX_FILE}", f"{len(index_map)} records"],
+        ["point_id/log_seq mismatches", str(len(mismatch))],
+        ["System endianness", models.BYTE_ORDER_LABEL],
+        ["Source files",
          f"{SOURCE_POINT_FILE}, {SOURCE_LOG_FILE}, {SOURCE_INDEX_FILE}"],
     ]
     all_valid = store_valid and log_valid and index_valid
     diff_total = len(mismatch) + len(index_only) + len(log_only)
     check_rows = [
-        [f"ขนาดไฟล์ข้อมูลหลักหารด้วย {models.RECORD_SIZE} ลงตัว", "ผ่าน",
-         "ผ่าน" if store_valid else "ไม่ผ่าน"],
-        [f"ขนาดไฟล์ log หารด้วย {models.LOG_RECORD_SIZE} ลงตัว", "ผ่าน",
-         "ผ่าน" if log_valid else "ไม่ผ่าน"],
-        [f"ขนาดไฟล์ index หารด้วย {models.INDEX_RECORD_SIZE} ลงตัว", "ผ่าน",
-         "ผ่าน" if index_valid else "ไม่ผ่าน"],
-        [f"{SOURCE_INDEX_FILE} สอดคล้องกับ {SOURCE_LOG_FILE}",
-         "ไม่มีรายการไม่ตรงกัน",
-         "ผ่าน" if diff_total == 0 else f"ไม่ผ่าน ({diff_total} รายการ)"],
-        ["ระบบทั้งระบบอยู่ในสถานะปกติ", "ทุกไฟล์ถูกต้อง",
-         "ผ่าน" if all_valid and diff_total == 0
-         else "ตรวจสอบข้อมูลอีกครั้ง"],
+        [f"Primary data file size divisible by {models.RECORD_SIZE}", "PASS",
+         "PASS" if store_valid else "FAIL"],
+        [f"Log file size divisible by {models.LOG_RECORD_SIZE}", "PASS",
+         "PASS" if log_valid else "FAIL"],
+        [f"Index file size divisible by {models.INDEX_RECORD_SIZE}", "PASS",
+         "PASS" if index_valid else "FAIL"],
+        [f"{SOURCE_INDEX_FILE} matches {SOURCE_LOG_FILE}",
+         "No mismatches",
+         "PASS" if diff_total == 0 else f"FAIL ({diff_total} mismatches)"],
+        ["System is healthy", "All files valid",
+         "PASS" if all_valid and diff_total == 0
+         else "Check data"],
     ]
     lines.extend(_footer_section(summary_rows, check_rows))
     return lines
@@ -550,6 +585,8 @@ def generate_all_reports(data_dir: str,
     """สร้างรายงานทั้ง 3 ชุดเป็น **ไฟล์ .txt แยกกัน** (เกณฑ์ข้อ 1 และ 4)
 
     รายงานทุกชุดถูกสร้างจากข้อมูลของไฟล์อย่างน้อย 2 ไฟล์ (เกณฑ์ข้อ 3)
+    ไฟล์รายงานใช้ความกว้างแบบ smart ให้แนวคอลัมน์ตรงกับการแสดงผลภาษาไทย
+    ส่วนโหมด alignment เดิมจะถูกคืนค่าไว้สำหรับตารางใน Terminal
 
     Args:
         data_dir: โฟลเดอร์ที่เก็บไฟล์ข้อมูลและจะเขียนรายงานลงที่นั่น
@@ -569,13 +606,18 @@ def generate_all_reports(data_dir: str,
         (REPORT_SYSTEM_NAME, build_report_system),
     )
     created: Dict[str, str] = {}
-    for file_name, builder in builders:
-        path = os.path.join(data_dir, file_name)
-        lines = builder(data_dir, points, log_entries, index_map,
-                        store_valid=store_valid, log_valid=log_valid,
-                        index_valid=index_valid, locations=locations)
-        _write_report(path, lines)
-        created[file_name] = path
+    previous_alignment = alignment_mode_name()
+    set_alignment_mode(True)
+    try:
+        for file_name, builder in builders:
+            path = os.path.join(data_dir, file_name)
+            lines = builder(data_dir, points, log_entries, index_map,
+                            store_valid=store_valid, log_valid=log_valid,
+                            index_valid=index_valid, locations=locations)
+            _write_report(path, lines)
+            created[file_name] = path
+    finally:
+        set_alignment_mode(previous_alignment == "smart")
     return created
 
 

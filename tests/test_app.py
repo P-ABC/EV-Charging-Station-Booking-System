@@ -435,15 +435,15 @@ class TestSeedAndFullReport(AppTestCase):
         self.assertTrue(os.path.exists(stats_path))
         with open(stats_path, "r", encoding="utf-8") as fh:
             stats_content = fh.read()
-        self.assertIn("ค่าเฉลี่ย (Avg)", stats_content)
-        self.assertIn("กิจกรรมล่าสุดจาก charge_points.log", stats_content)
+        self.assertIn("Average", stats_content)
+        self.assertIn("Recent activity from charge_points.log", stats_content)
 
         # ตรวจรายงานชุดที่ 3 (สถานะระบบไฟล์)
         system_path = created[reports_module.REPORT_SYSTEM_NAME]
         self.assertTrue(os.path.exists(system_path))
         with open(system_path, "r", encoding="utf-8") as fh:
             system_content = fh.read()
-        self.assertIn("สถานะไฟล์ไบนารีทั้ง 3 ไฟล์", system_content)
+        self.assertIn("Binary file status", system_content)
 
     def test_report_of_main_sample_matches_spec_numbers(self):
         """รายงานจากชุด 1001-1010 ต้องตรงกับตัวเลขในข้อกำหนด"""
@@ -518,4 +518,3 @@ class TestMenuLoopExit(AppTestCase):
                     f"ต้องสร้าง {file_name} ตอนออกโปรแกรม")
         finally:
             sys.stdin = original_stdin
-

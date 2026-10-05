@@ -118,6 +118,17 @@ class TestRenderTable(unittest.TestCase):
         self.assertIn("A", lines[1])
         self.assertTrue(lines[0].startswith("+"))
         self.assertTrue(lines[-1].startswith("+"))
+
+    def test_headers_and_cells_keep_left_alignment_by_default(self):
+        """หัวตารางและค่าทั่วไปจัดชิดซ้ายเป็นค่าเริ่มต้น"""
+        lines = report.render_table(
+            ["Name", "Count"],
+            [["CCS2", "2"], ["CHAdeMO", "13"]],
+        )
+
+        self.assertEqual(lines[1], "| Name    | Count |")
+        self.assertEqual(lines[3], "| CCS2    | 2     |")
+        self.assertEqual(lines[4], "| CHAdeMO | 13    |")
 class TestStatistics(unittest.TestCase):
     """ทดสอบการคำนวณสถิติจากชุดข้อมูลตัวอย่าง 1001-1010"""
 
@@ -345,4 +356,3 @@ class TestBuildAndWriteReport(unittest.TestCase):
                       "power_kw", "price_per_kwh", "status", "is_booked",
                       "is_deleted", "created_at", "updated_at"):
             self.assertIn(field, card)
-

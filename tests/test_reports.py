@@ -138,22 +138,17 @@ class TestCriterion2ThreeParts(ReportsTestCase):
                           f"{file_name} ไม่มีผลการตรวจสอบความสอดคล้อง")
 
     def test_consistency_checks_all_pass(self):
-        """ผลตรวจสอบความสอดคล้องต้องผ่านทั้งหมดเมื่อข้อมูลปกติ
-
-        หมายเหตุ: ต้องแยกคำว่า "ผ่าน" ออกจาก "ไม่ผ่าน" อย่างระวัง
-        เพราะ "ผ่าน" เป็นส่วนหนึ่งของ "ไม่ผ่าน" จึงใช้การนับจำนวนแถว
-        """
+        """Every consistency result is PASS or INFO for valid input."""
         for file_name in reports_module.ALL_REPORT_NAMES:
             content = self.read_report(file_name)
             check_section = content.split("[CONSISTENCY CHECK]", 1)[1]
             rows = [line for line in check_section.splitlines()
-                    if line.startswith("|") and "ผลลัพธ์" not in line
-                    and "รายการตรวจสอบ" not in line]
+                    if line.startswith("|") and "Result" not in line]
             self.assertGreater(len(rows), 0,
                                f"{file_name} ไม่มีแถวผลตรวจสอบ")
             for row in rows:
-                self.assertNotIn("ไม่ผ่าน", row,
-                                 f"{file_name} มีผลตรวจสอบไม่ผ่าน: {row}")
+                self.assertNotIn("FAIL", row,
+                                 f"{file_name} has a failed check: {row}")
 
     def test_summary_numbers_match_table_content(self):
         """ยอดในส่วนสรุปต้องตรงกับจำนวน record จริงในไฟล์ข้อมูล
@@ -201,28 +196,17 @@ class TestCriterion3MultipleSourceFiles(ReportsTestCase):
                               f"{file_name} ไม่ได้ระบุแหล่งข้อมูล {source}")
 
     def test_points_report_combines_index_with_data(self):
-        """รายงานที่ 1 ต้องรวมข้อมูลจาก index.dat เข้ากับข้อมูลหลักจริง
-
-        ทดสอบว่าคอลัมน์ LogSeq (มาจาก index.dat) ปรากฏในตาราง
-        และค่าที่แสดงตรงกับที่อ่านจาก index.dat ได้จริง
-        """
+        """รายงานระบุข้อมูล index.dat ในส่วนสรุปโดยไม่เพิ่มคอลัมน์ให้ตารางหลัก"""
         content = self.read_report(reports_module.REPORT_POINTS_NAME)
-        self.assertIn("LogSeq", content)
-
-        # ตรวจว่าค่า LogSeq ที่แสดงตรงกับที่ index อ่านได้จริง
         index_map = self.app.point_index.as_dict()
         self.assertTrue(index_map, "index.dat ต้องมีข้อมูล")
-        point_id = sorted(index_map)[0]
-        # แถวของ point_id นี้ต้องมี log_seq ตรงกับ index
-        row = next(line for line in content.splitlines()
-                   if line.startswith("|")
-                   and f"| {point_id} " in line)
-        self.assertIn(f"| {index_map[point_id]} ", row)
+        self.assertIn("Records in index.dat", content)
+        self.assertNotIn("LogSeq", content)
 
     def test_stats_report_combines_log_with_data(self):
         """รายงานที่ 2 ต้องรวมข้อมูลจาก log เข้ากับสถิติจากข้อมูลหลัก"""
         content = self.read_report(reports_module.REPORT_STATS_NAME)
-        self.assertIn("กิจกรรมล่าสุดจาก charge_points.log", content)
+        self.assertIn("Recent activity from charge_points.log", content)
         self.assertIn("ADD", content)
 
     def test_system_report_compares_index_with_log(self):
@@ -235,12 +219,12 @@ class TestCriterion3MultipleSourceFiles(ReportsTestCase):
         content = self.read_report(reports_module.REPORT_SYSTEM_NAME)
         self.assertIn("index.dat", content)
         self.assertIn("charge_points.log", content)
-        self.assertIn("index.dat สอดคล้องกับ charge_points.log", content)
+        self.assertIn("index.dat matches charge_points.log", content)
 
     def test_system_report_shows_diff_table_only_when_problem_exists(self):
         """ต้องไม่แสดงตารางเทียบเมื่อไม่มีปัญหา แต่ต้องแสดงเมื่อมีปัญหาจริง"""
         normal = self.read_report(reports_module.REPORT_SYSTEM_NAME)
-        self.assertNotIn("ผลการเทียบข้อมูลระหว่าง index.dat", normal,
+        self.assertNotIn("Compare index.dat with charge_points.log", normal,
                          "ไม่ควรมีตารางเทียบเมื่อไม่มีปัญหา")
 
         # ทำให้ index.dat ไม่ตรงกับ log แล้วต้องมีตารางแสดงปัญหา
@@ -251,8 +235,8 @@ class TestCriterion3MultipleSourceFiles(ReportsTestCase):
         self.app.app_reload()          # เปิดไฟล์ใหม่เพื่อรับค่าที่แก้ไข
         self.app.generate_report(silent=True)
         broken = self.read_report(reports_module.REPORT_SYSTEM_NAME)
-        self.assertIn("ผลการเทียบข้อมูลระหว่าง index.dat", broken)
-        self.assertIn("log_seq ใน index", broken)
+        self.assertIn("Compare index.dat with charge_points.log", broken)
+        self.assertIn("log_seq in index", broken)
 
 
 class TestCriterion4SeparateTxtFiles(ReportsTestCase):
@@ -273,9 +257,9 @@ class TestCriterion4SeparateTxtFiles(ReportsTestCase):
         (บรรทัดชื่อเรื่องถูกตัดออกแล้ว จึงใช้ชื่อไฟล์แยกเป็นตัวระบุ)
         """
         markers = {
-            reports_module.REPORT_POINTS_NAME: "ตารางข้อมูลหัวชาร์จทั้งหมด",
-            reports_module.REPORT_STATS_NAME: "สถิติราคาและกำลังไฟ",
-            reports_module.REPORT_SYSTEM_NAME: "สถานะไฟล์ไบนารีทั้ง 3 ไฟล์",
+            reports_module.REPORT_POINTS_NAME: "All charging points",
+            reports_module.REPORT_STATS_NAME: "Price and power statistics",
+            reports_module.REPORT_SYSTEM_NAME: "Binary file status",
         }
         for file_name, own_marker in markers.items():
             content = self.read_report(file_name)
@@ -287,7 +271,7 @@ class TestCriterion4SeparateTxtFiles(ReportsTestCase):
                                      f"{file_name} ไม่ควรมีเนื้อหาของ {other_name}")
 
     def test_table_lines_are_aligned(self):
-        """เส้นขอบตารางต้องตรงกัน (ไม่เพี้ยน) โดยวัดด้วย display_width"""
+        """บรรทัดของตารางในไฟล์ต้องมีความกว้างแสดงผลเท่ากัน"""
         for file_name in reports_module.ALL_REPORT_NAMES:
             content = self.read_report(file_name)
             blocks, current = [], []
@@ -307,6 +291,27 @@ class TestCriterion4SeparateTxtFiles(ReportsTestCase):
                 self.assertEqual(len(widths), 1,
                                  f"{file_name}: บรรทัดในตารางเดียวกันต้อง"
                                  f"กว้างเท่ากัน แต่พบ {widths}")
+
+    def test_vertical_columns_align_in_every_report_table(self):
+        """ตำแหน่งเส้นแบ่งคอลัมน์ต้องตรงกันทุกตารางในทั้งสามรายงาน"""
+        report_core.set_alignment_mode(True)
+        self.app.generate_report(silent=True)
+        self.assertEqual(report_core.alignment_mode_name(), "smart")
+        for file_name in reports_module.ALL_REPORT_NAMES:
+            for block in TestAlignmentModes._blocks(self.read_report(file_name)):
+                expected = tuple(report_core.display_width(block[0][:index])
+                                 for index, char in enumerate(block[0])
+                                 if char == "+")
+                for line in block[1:]:
+                    border = "|" if line.startswith("|") else "+"
+                    actual = tuple(report_core.display_width(line[:index])
+                                   for index, char in enumerate(line)
+                                   if char == border)
+                    self.assertEqual(
+                        actual, expected,
+                        f"{file_name}: คอลัมน์ในตารางไม่ตรงแนว\n"
+                        f"{block[0]}\n{line}",
+                    )
 
     def test_reports_are_readable_utf8_without_replacement_char(self):
         """ไฟล์รายงานต้องเป็น UTF-8 และไม่มีอักขระเพี้ยน"""
@@ -401,7 +406,9 @@ class TestCriterion6ReportsReflectEdits(ReportsTestCase):
         self.app.generate_report(silent=True)
         content = self.read_report(reports_module.REPORT_POINTS_NAME)
         self.assertIn("1.25", content)
-        self.assertNotIn("| 6.00           | Active", content)
+        row = next(line for line in content.splitlines()
+                   if line.startswith("|") and "| 1001 " in line)
+        self.assertNotIn("6.00", row)
 
     def test_update_changes_index_and_reports(self):
         """แก้ไขข้อมูลต้องทำให้ทั้ง index และรายงานเปลี่ยนตาม"""
@@ -553,10 +560,26 @@ class TestReportValuesMatchData(ReportsTestCase):
     def test_system_report_shows_all_three_file_statuses(self):
         """รายงานระบบต้องแสดงสถานะไฟล์ทั้ง 3 ไฟล์พร้อมขนาด"""
         content = self.read_report(reports_module.REPORT_SYSTEM_NAME)
-        self.assertIn("| ข้อมูลหลัก   | charge_points.dat | <l10s30s10sfflllll | 82 ไบต์",
-                      content)
+        table = content.split("[TABLE 1]", 1)[1].split("[SUMMARY]", 1)[0]
+        rows = [line for line in table.splitlines()
+                if line.startswith("|") and "charge_points.dat" in line]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(
+            [cell.strip() for cell in rows[0].strip("|").split("|")][:4],
+            ["Primary data", "charge_points.dat",
+             "<l10s30s10sfflllll", "82 bytes"],
+        )
         self.assertIn("charge_points.log", content)
         self.assertIn("index.dat", content)
+
+    def test_report_tables_use_english_text(self):
+        """Table labels and cell values are English to avoid Thai glyph drift."""
+        for file_name in reports_module.ALL_REPORT_NAMES:
+            for line in self.read_report(file_name).splitlines():
+                if line.startswith(("+", "|")):
+                    self.assertFalse(
+                        any("\u0e00" <= char <= "\u0e7f" for char in line),
+                        f"{file_name} contains Thai text in a table: {line}")
 
 
 class TestSectionRuleMatchesTable(ReportsTestCase):
@@ -697,17 +720,16 @@ class TestNoExplanatoryTables(ReportsTestCase):
             self.assertIn("charge_points.dat", content)
             self.assertIn("charge_points.log", content)
             self.assertIn("index.dat", content)
-            self.assertIn("ไฟล์ต้นทางที่ใช้ประกอบรายงานนี้", content)
+            self.assertIn("Source files", content)
 
     def test_main_data_tables_are_kept(self):
         """ต้องยังมีตารางข้อมูลหลักและตารางสรุป/ตรวจสอบครบ"""
         expectations = {
-            reports_module.REPORT_POINTS_NAME: ("PtID", "รายการ",
-                                                "รายการตรวจสอบ"),
-            reports_module.REPORT_STATS_NAME: ("สถิติ", "ประเภทหัว",
-                                               "รายการตรวจสอบ"),
-            reports_module.REPORT_SYSTEM_NAME: ("Struct format", "รายการ",
-                                                "รายการตรวจสอบ"),
+            reports_module.REPORT_POINTS_NAME: ("PtID", "Item", "Check"),
+            reports_module.REPORT_STATS_NAME: ("Statistic", "Connector",
+                                               "Check"),
+            reports_module.REPORT_SYSTEM_NAME: ("Struct format", "Item",
+                                                "Check"),
         }
         for name, expected in expectations.items():
             content = self.read_report(name)
@@ -756,6 +778,10 @@ class TestAlignmentModes(ReportsTestCase):
         report_core.set_alignment_mode(False)
         self.assertEqual(report_core.alignment_mode_name(), "simple")
 
+    def test_smart_mode_is_default_for_terminal_alignment(self):
+        """ค่าเริ่มต้นจัดแนวใน Terminal ตามความกว้างที่แสดงจริง"""
+        self.assertEqual(main.build_parser().parse_args([]).align, "smart")
+
     def test_measure_uses_selected_metric(self):
         """ฟังก์ชัน measure ต้องวัดตามโหมดที่เลือก"""
         text = "ชั้น"          # ช ั ้ น = 4 ตัวอักษร แต่กินพื้นที่ 2 ช่อง
@@ -766,48 +792,64 @@ class TestAlignmentModes(ReportsTestCase):
         report_core.set_alignment_mode(False)
         self.assertEqual(report_core.measure(text), 4)
 
-    def test_smart_mode_rows_equal_in_display_width(self):
-        """โหมด smart: ทุกบรรทัดในบล็อกต้องกว้างเท่ากันตาม display_width"""
+    def test_report_files_use_display_width_and_preserve_terminal_mode(self):
+        """ไฟล์ใช้แนวจัด smart โดยไม่เปลี่ยนโหมดจัดตารางของ Terminal"""
+        for smart in (True, False):
+            report_core.set_alignment_mode(smart)
+            self.app.generate_report(silent=True)
+            self.assertEqual(report_core.alignment_mode_name(),
+                             "smart" if smart else "simple")
+            for name in reports_module.ALL_REPORT_NAMES:
+                for block in self._blocks(self.read_report(name)):
+                    widths = {report_core.display_width(row) for row in block}
+                    self.assertEqual(len(widths), 1,
+                                     f"{name}: ความกว้างแสดงผลไม่เท่ากัน")
+
+    def test_report_files_align_vertical_borders_by_display_width(self):
+        """เส้นแบ่งคอลัมน์ทุกเส้นในไฟล์ต้องตรงตามตำแหน่งที่เห็นบนจอ"""
         for name, content in self._generate(True).items():
             for block in self._blocks(content):
-                widths = {report_core.display_width(row) for row in block}
-                self.assertEqual(len(widths), 1,
-                                 f"{name}: ความกว้างไม่เท่ากัน {widths}")
+                expected = tuple(
+                    report_core.display_width(block[0][:index])
+                    for index, char in enumerate(block[0]) if char == "+"
+                )
+                for row in block[1:]:
+                    border = "|" if row.startswith("|") else "+"
+                    actual = tuple(
+                        report_core.display_width(row[:index])
+                        for index, char in enumerate(row) if char == border
+                    )
+                    self.assertEqual(
+                        actual, expected,
+                        f"{name}: เส้นแบ่งคอลัมน์ไม่ตรงตามความกว้างแสดงผล")
 
-    def test_simple_mode_rows_equal_in_character_count(self):
-        """โหมด simple: ทุกบรรทัดในบล็อกต้องมีจำนวนตัวอักษรเท่ากัน"""
-        for name, content in self._generate(False).items():
+    def test_english_report_borders_share_character_indices(self):
+        """English-only table text keeps border indices identical in plain text."""
+        for name, content in self._generate(True).items():
             for block in self._blocks(content):
-                lengths = {len(row) for row in block}
-                self.assertEqual(len(lengths), 1,
-                                 f"{name}: จำนวนตัวอักษรไม่เท่ากัน {lengths}")
-
-    def test_simple_mode_aligns_vertical_bars_by_character(self):
-        """โหมด simple: ตำแหน่งเส้น | ต้องตรงกันแม้นับตามตัวอักษร
-
-        นี่คือเกณฑ์ที่แก้ปัญหา "เส้นแนวตั้งไม่ตรง" ของโปรแกรมที่ไม่จัดวางสระไทย
-        """
-        for name, content in self._generate(False).items():
-            for block in self._blocks(content):
-                positions = {tuple(i for i, char in enumerate(row)
-                                   if char == "|")
-                             for row in block if row.startswith("|")}
-                self.assertEqual(len(positions), 1,
-                                 f"{name}: เส้นแนวตั้ง '|' ไม่ตรงกัน")
+                expected = tuple(index for index, char in enumerate(block[0])
+                                 if char == "+")
+                for row in block[1:]:
+                    border = "|" if row.startswith("|") else "+"
+                    actual = tuple(index for index, char in enumerate(row)
+                                   if char == border)
+                    self.assertEqual(
+                        actual, expected,
+                        f"{name}: border character indices do not align")
 
     def test_both_modes_contain_full_location(self):
         """ทั้งสองโหมดต้องแสดงชื่อสถานที่แบบเต็มเหมือนกัน"""
         for smart in (True, False):
             content = self._generate(smart)[reports_module.REPORT_POINTS_NAME]
-            self.assertIn("เซ็นทรัลเวิลด์ ลาน P2", content)
-            self.assertIn("สยามพารากอน ชั้น B1", content)
+            self.assertIn("CentralWorld, Parking P2", content)
+            self.assertIn("Siam Paragon, Level B1", content)
 
-    def test_both_modes_keep_horizontal_rule_matching(self):
-        """เส้นคั่นหัวข้อต้องตรงกับตารางในทั้งสองโหมด"""
+    def test_file_rules_match_table_character_width(self):
+        """เส้นคั่นไฟล์รายงานต้องยาวเท่าตารางตามความกว้างแสดงผล"""
         for smart in (True, False):
             for name, content in self._generate(smart).items():
                 lines = content.splitlines()
-                measure = report_core.display_width if smart else len
+                measure = report_core.display_width
                 found = 0
                 for index, line in enumerate(lines):
                     if not line or set(line) != {"-"}:
@@ -826,7 +868,7 @@ class TestAlignmentModes(ReportsTestCase):
                             and lines[cursor].startswith(("+", "|")):
                         width = max(width, measure(lines[cursor]))
                         cursor += 1
-                    self.assertEqual(measure(line), width,
+                    self.assertEqual(report_core.display_width(line), width,
                                      f"{name} (smart={smart}): เส้นคั่นไม่ตรง")
                     found += 1
                 self.assertGreater(found, 0, f"{name} ไม่พบเส้นคั่น")
@@ -837,7 +879,7 @@ class TestTablesFitScreen(ReportsTestCase):
 
     ปัญหาที่พบระหว่างพัฒนา
     ----------------------
-    ตารางข้อมูลหัวชาร์จเดิมมี 10 คอลัมน์ กว้างถึง 149 ช่อง
+    ตารางข้อมูลหัวชาร์จเดิมมี 10 คอลัมน์และกว้างมาก
     เมื่อเปิดในโปรแกรมที่ความกว้างหน้าจอน้อยกว่านั้น โปรแกรมจะตัดบรรทัด
     (word wrap) เส้น "|" ที่อยู่ปลายบรรทัดจึงตกไปบรรทัดถัดไป
     ผู้อ่านจึงเห็นเส้นแนวตั้งไม่ตรงกัน แม้ไฟล์จะถูกต้องก็ตาม
@@ -857,9 +899,9 @@ class TestTablesFitScreen(ReportsTestCase):
         return result
 
     def _is_main_point_table(self, block) -> bool:
-        """ตารางข้อมูลหัวชาร์จหลักของรายงานที่ 1 (รวมข้อมูลครบ 10 คอลัมน์)"""
+        """ตารางข้อมูลหัวชาร์จหลักของรายงานที่ 1"""
         header = block[1] if len(block) > 1 else ""
-        return "LogSeq" in header and "Updated" in header
+        return "PtID" in header and "Updated" in header
 
     def test_no_table_exceeds_screen_width(self):
         """ไม่มีตารางใดกว้างเกินความกว้างที่กำหนด
@@ -895,15 +937,42 @@ class TestTablesFitScreen(ReportsTestCase):
                     f"(เกิน {limit})")
 
     def test_no_cell_is_truncated(self):
-        """ข้อมูลสำคัญต้องไม่ถูกตัดด้วย '...'"""
+        """ยอมให้ย่อเฉพาะช่อง Location ซึ่งมีชื่อเต็มแสดงต่อใต้ตาราง"""
         for name in reports_module.ALL_REPORT_NAMES:
             for line in self.read_report(name).splitlines():
                 if not line.startswith("|"):
                     continue
-                for cell in line.strip("|").split("|"):
+                cells = line.strip("|").split("|")
+                is_main_points_row = (
+                    name == reports_module.REPORT_POINTS_NAME
+                    and len(cells) == 9
+                    and cells[0].strip().isdigit()
+                )
+                for index, cell in enumerate(cells):
+                    if is_main_points_row and index == 2:
+                        continue
                     self.assertFalse(
                         cell.strip().endswith("..."),
                         f"{name}: เซลล์ถูกตัด -> {cell.strip()}")
+
+    def test_long_locations_are_preserved_below_compact_main_table(self):
+        """จำกัดความกว้างช่อง Location แต่เก็บชื่อเต็มไว้ใต้ตาราง"""
+        content = self.read_report(reports_module.REPORT_POINTS_NAME)
+        self.assertIn("[LOCATION DETAILS]", content)
+        full_location = (
+            "Siam Paragon EV Station, New Basement Project and Parking Lot"
+        )
+        self.assertIn(full_location, content)
+        point_row = next(
+            line for line in content.splitlines()
+            if line.startswith("|") and "| 2011 " in line
+        )
+        location_cell = point_row.strip("|").split("|")[2].strip()
+        self.assertTrue(location_cell.endswith("..."))
+        self.assertLessEqual(
+            report_core.measure(location_cell),
+            reports_module.MAIN_TABLE_LOCATION_WIDTH,
+        )
 
     def test_header_cells_are_not_truncated(self):
         """หัวตารางต้องอ่านออก ไม่ถูกตัดจนกลายเป็น 'Struct f...'"""
@@ -936,7 +1005,7 @@ class TestTablesFitScreen(ReportsTestCase):
         self.assertEqual(result, [20, 10])    # หยุดที่ขั้นต่ำ ไม่ลดต่อ
 
     def test_main_point_table_is_merged_into_one(self):
-        """ตารางหัวชาร์จถูกรวมเป็นตารางเดียวที่มีข้อมูลครบ 10 คอลัมน์"""
+        """ตารางหัวชาร์จใช้คอลัมน์ตามตัวอย่างและไม่แสดง LogSeq"""
         content = self.read_report(reports_module.REPORT_POINTS_NAME)
         self.assertNotIn("[TABLE 1]", content)
         self.assertNotIn("[TABLE 2]", content)
@@ -945,11 +1014,11 @@ class TestTablesFitScreen(ReportsTestCase):
         header = None
         for block in self._blocks(content):
             line = block[1] if len(block) > 1 else ""
-            if "LogSeq" in line and "Updated" in line:
+            if "PtID" in line and "Updated" in line:
                 header = line
         self.assertIsNotNone(header, "ไม่พบตารางข้อมูลหัวชาร์จที่รวมข้อมูลครบ")
         for column in ("PtID", "Station", "Location", "Plug", "Power",
-                       "Price", "Status", "Booked", "LogSeq", "Updated"):
+                       "Price", "Status", "Booked", "Updated"):
             self.assertIn(column, header)
 
     def test_main_point_table_fits_its_own_limit(self):
@@ -975,11 +1044,10 @@ class TestFullLocationIsReadable(ReportsTestCase):
         self.assertGreater(os.path.getsize(path), 0)
 
     def test_report_shows_full_name_not_truncated(self):
-        """รายงานต้องแสดงชื่อเต็ม เช่น 'เซ็นทรัลเวิลด์ ลาน P2' ไม่ใช่ 'เซ็นทรัลเว'"""
+        """The report uses English location labels in the main table."""
         content = self.read_report(reports_module.REPORT_POINTS_NAME)
-        self.assertIn("เซ็นทรัลเวิลด์ ลาน P2", content)
-        self.assertIn("สยามพารากอน ชั้น B1", content)
-        self.assertNotIn("| เซ็นทรัลเว ", content)
+        self.assertIn("CentralWorld, Parking P2", content)
+        self.assertIn("Siam Paragon, Level B1", content)
 
     def test_binary_record_still_limited_to_30_bytes(self):
         """record ไบนารียังคงเก็บ location ได้ไม่เกิน 30 ไบต์ตามสเปก"""
@@ -1025,6 +1093,63 @@ class TestTerminalShowsFullLocation(ReportsTestCase):
                 else getattr(self.app, method_name)(*args, **kwargs)
         return buffer.getvalue()
 
+    def _assert_terminal_table_columns_align(self, output: str) -> None:
+        """ยืนยันว่าเส้นแบ่งคอลัมน์ในตาราง Terminal อยู่ตำแหน่งเดียวกัน"""
+        blocks, current = [], []
+        for raw_line in output.splitlines() + [""]:
+            line = raw_line.lstrip()
+            if line.startswith(("+", "|")):
+                current.append(line)
+            elif current:
+                blocks.append(current)
+                current = []
+        self.assertTrue(blocks, "ไม่พบตารางใน output ของ Terminal")
+
+        for block in blocks:
+            expected = tuple(
+                report_core.display_width(block[0][:index])
+                for index, char in enumerate(block[0]) if char == "+"
+            )
+            for line in block[1:]:
+                self.assertFalse(
+                    any("\u0e00" <= char <= "\u0e7f" for char in line),
+                    f"Terminal table contains Thai text: {line}",
+                )
+                border = "|" if line.startswith("|") else "+"
+                actual = tuple(
+                    report_core.display_width(line[:index])
+                    for index, char in enumerate(line) if char == border
+                )
+                self.assertEqual(actual, expected,
+                                 f"เส้นแบ่งคอลัมน์ไม่ตรงกัน:\n{block[0]}\n{line}")
+
+    def test_tables_align_in_terminal_views(self):
+        """ตารางดูทั้งหมด กรอง และประวัติล่าสุดจัดแนวตรงกันใน Terminal"""
+        report_core.set_alignment_mode(True)
+        self._assert_terminal_table_columns_align(self._capture("view_all"))
+
+        import validators
+        original_menu_choice = validators.ask_menu_choice
+        original_station_code = validators.ask_station_code
+        validators.ask_menu_choice = lambda prompt, allowed: 1
+        validators.ask_station_code = lambda: "EVS-0001"
+        try:
+            self._assert_terminal_table_columns_align(
+                self._capture("view_filtered")
+            )
+        finally:
+            validators.ask_menu_choice = original_menu_choice
+            validators.ask_station_code = original_station_code
+
+        original_point_id = validators.ask_point_id
+        validators.ask_point_id = lambda: 1001
+        try:
+            self._assert_terminal_table_columns_align(
+                self._capture("view_single")
+            )
+        finally:
+            validators.ask_point_id = original_point_id
+
     def test_location_store_returns_full_name(self):
         """LocationStore ต้องคืนชื่อเต็ม ไม่ใช่ค่าที่ถูกตัด 30 ไบต์"""
         store = self.app.store
@@ -1037,10 +1162,10 @@ class TestTerminalShowsFullLocation(ReportsTestCase):
         self.assertLessEqual(len(point.location.encode("utf-8")), 30)
 
     def test_view_all_prints_full_location(self):
-        """เมนู View All ต้องแสดงชื่อสถานที่ตั้งแบบเต็ม"""
+        """View All uses English labels for known locations."""
         output = self._capture("view_all")
-        self.assertIn("เซ็นทรัลเวิลด์ ลาน P2", output)
-        self.assertIn("สยามพารากอน ชั้น B1", output)
+        self.assertIn("CentralWorld, Parking P2", output)
+        self.assertIn("Siam Paragon, Level B1", output)
 
     def test_view_filtered_prints_full_location(self):
         """เมนูค้นหา/กรองต้องแสดงชื่อสถานที่ตั้งแบบเต็ม"""
@@ -1054,7 +1179,7 @@ class TestTerminalShowsFullLocation(ReportsTestCase):
         finally:
             (validators.ask_menu_choice,
              validators.ask_station_code) = originals
-        self.assertIn("เซ็นทรัลเวิลด์ ลาน P2", output)
+        self.assertIn("CentralWorld, Parking P2", output)
 
     def test_new_long_location_shows_in_terminal(self):
         """เพิ่มชื่อที่ยาวมากแล้ว Terminal ต้องแสดงชื่อเต็ม"""

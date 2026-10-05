@@ -529,21 +529,32 @@ class ChargingStationApp:
             print("   (ยังไม่มีข้อมูลในระบบ — เลือกเมนู 1 เพื่อเพิ่มข้อมูล)")
             return
 
-        rows = [
-            (str(point.point_id), point.station_code,
-             self.location_store.full_location(point),
-             point.plug_type, f"{point.power_kw:.1f}",
-             f"{point.price_per_kwh:.2f}", point.status_text, point.booked_text)
-            for point in points
-        ]
+        rows = []
+        custom_locations = []
+        for point in points:
+            location = self.location_store.full_location(point)
+            location_label = reports_module.english_location_label(location)
+            if location_label is None:
+                custom_locations.append((point.point_id, location))
+                location_label = "Custom location"
+            rows.append((
+                str(point.point_id), point.station_code, location_label,
+                point.plug_type, f"{point.power_kw:.1f}",
+                f"{point.price_per_kwh:.2f}", point.status_text,
+                point.booked_text,
+            ))
         headers = ["PtID", "Station", "Location", "Plug", "Power(kW)",
                    "Price(THB/kWh)", "Status", "Booked"]
         # ไม่จำกัดความกว้างบน Terminal เพื่อให้ชื่อสถานที่ตั้งแสดงครบทุกตัวอักษร
         # (Terminal ปรับความกว้างเองได้ ต่างจากไฟล์ .txt ที่ต้องพอดีหน้าจอ)
         for line in report_module.render_table(headers, rows, max_width=None):
             print(line)
-        print(f"   รวม {len(points)} record "
-              f"(ข้อมูลในไฟล์: {self.store.count_records()} record)")
+        if custom_locations:
+            print("\n   [LOCATION DETAILS] Custom location names")
+            for point_id, location in custom_locations:
+                print(f"     PtID {point_id}: {location}")
+        print(f"   Total: {len(points)} records "
+              f"(data file: {self.store.count_records()} records)")
 
     # ------------------------------------------------------------------
     # เมนู 4.3) View แบบกรอง
@@ -586,19 +597,30 @@ class ChargingStationApp:
                   f"{field_name}={value} (ระบบข้าม record ที่ถูกลบแล้ว)")
             return
 
-        rows = [
-            (str(point.point_id), point.station_code,
-             self.location_store.full_location(point),
-             point.plug_type, f"{point.power_kw:.1f}",
-             f"{point.price_per_kwh:.2f}", point.status_text, point.booked_text)
-            for point in points
-        ]
+        rows = []
+        custom_locations = []
+        for point in points:
+            location = self.location_store.full_location(point)
+            location_label = reports_module.english_location_label(location)
+            if location_label is None:
+                custom_locations.append((point.point_id, location))
+                location_label = "Custom location"
+            rows.append((
+                str(point.point_id), point.station_code, location_label,
+                point.plug_type, f"{point.power_kw:.1f}",
+                f"{point.price_per_kwh:.2f}", point.status_text,
+                point.booked_text,
+            ))
         headers = ["PtID", "Station", "Location", "Plug", "Power(kW)",
                    "Price(THB/kWh)", "Status", "Booked"]
-        print(f"   ผลลัพธ์ ({field_name}={value}): พบ {len(points)} record")
+        print(f"   Results ({field_name}={value}): {len(points)} records")
         # ไม่จำกัดความกว้างบน Terminal เพื่อให้ชื่อสถานที่ตั้งแสดงครบ
         for line in report_module.render_table(headers, rows, max_width=None):
             print(line)
+        if custom_locations:
+            print("\n   [LOCATION DETAILS] Custom location names")
+            for point_id, location in custom_locations:
+                print(f"     PtID {point_id}: {location}")
 
     # ------------------------------------------------------------------
     # เมนู 4.4) สถิติโดยสรุป
@@ -765,7 +787,7 @@ class ChargingStationApp:
         print("   simple = ทุกตัวอักษรกิน 1 ช่อง (โปรแกรมไม่จัดวางสระไทย)")
         report_module.set_alignment_mode(new_mode == "smart")
         print(f"   [สำเร็จ] เปลี่ยนเป็นโหมด {new_mode} แล้ว")
-        print("           เลือกเมนู 5 เพื่อสร้างรายงานใหม่ด้วยโหมดนี้")
+        print("           โหมดนี้ใช้กับตารางใน Terminal; ไฟล์รายงานใช้แนวจัดแบบ smart")
 
     def app_reload(self) -> None:
         """เปิดไฟล์ทั้ง 3 ใหม่เพื่อรีเฟรชแคชในหน่วยความจำ
@@ -1015,11 +1037,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help="แสดงสเปกระเบียนของไฟล์ไบนารีทั้ง 3 ไฟล์แล้วออก")
     parser.add_argument("--align", choices=("smart", "simple"),
                         default="smart",
-                        help="วิธีจัดความกว้างตารางในรายงาน: "
+                        help="วิธีจัดความกว้างตารางใน Terminal: "
                              "smart = นับสระ/วรรณยุกต์ไทยเป็น 0 ช่อง "
-                             "(ถูกต้องใน Terminal/VS Code/Notepad), "
-                             "simple = นับทุกตัวอักษรเป็น 1 ช่อง "
-                             "(ใช้เมื่อเปิดด้วยโปรแกรมที่ไม่จัดวางสระไทย)")
+                             "(ค่าเริ่มต้น จัดแนวตามความกว้างที่แสดงจริง), "
+                             "simple = นับทุกตัวอักษรเป็น 1 ช่อง")
     parser.add_argument("--version", action="version",
                         version=f"EV Charging Station Booking System "
                                 f"{models.APP_VERSION}")
@@ -1099,4 +1120,3 @@ def main(argv: Optional[List[str]] = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

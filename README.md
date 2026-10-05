@@ -311,16 +311,22 @@ Point ID :    [ปฏิเสธ] หัวชาร์จ 9001 กำลัง
 ```
 
 ### 5.4 เมนูดูทั้งหมด (4.2) — ตัวอย่างบางแถว
-+------+----------+-----------------+---------+-----------+----------------+----------+--------+
-| PtID | Station  | Location        | Plug    | Power(kW) | Price(THB/kWh) | Status   | Booked |
-+------+----------+-----------------+---------+-----------+----------------+----------+--------+
-| 1001 | EVS-0001 | สยามพารากอ      | Type2   | 7.4       | 6.00           | Active   | Yes    |
-| 1002 | EVS-0002 | เซ็นทรัลเว      | CCS2    | 150.0     | 6.25           | Active   | Yes    |
-| 1003 | EVS-0003 | ICONSIAM ชั้น G  | CCS2    | 120.0     | 6.75           | Active   | Yes    |
-| 1004 | EVS-0004 | เมกาบางนา       | CHAdeMO | 50.0      | 7.00           | Active   | Yes    |
-| 1005 | EVS-0005 | เซ็นทรัลพร      | Type2   | 22.0      | 7.25           | Active   | No     |
-| 1010 | EVS-0010 | พารากอน โค      | Type2   | 7.0       | 9.00           | Deleted  | No     |
-+------+----------+-----------------+---------+-----------+----------------+----------+--------+
+
+ตารางแสดงป้ายภาษาอังกฤษเพื่อให้แนวคอลัมน์ตรงกัน โดยข้อมูลสถานที่ต้นฉบับ
+ยังคงเดิมในไฟล์ หากเป็นสถานที่กำหนดเอง ตารางจะแสดง `Custom location`
+และพิมพ์ชื่อเต็มแยกไว้นอกตาราง
+
+```
++------+----------+---------------------------------------------------------------+---------+-----------+----------------+----------+--------+
+| PtID | Station  | Location                                                      | Plug    | Power(kW) | Price(THB/kWh) | Status   | Booked |
++------+----------+---------------------------------------------------------------+---------+-----------+----------------+----------+--------+
+| 1001 | EVS-0001 | Siam Paragon, Level B1                                        | Type2   | 7.4       | 6.00           | Active   | Yes    |
+| 1002 | EVS-0002 | CentralWorld, Parking P2                                      | CCS2    | 150.0     | 6.25           | Active   | Yes    |
+| 1003 | EVS-0003 | ICONSIAM, Level G                                             | CCS2    | 120.0     | 6.75           | Active   | Yes    |
+| 1004 | EVS-0004 | Mega Bangna, Zone A                                           | CHAdeMO | 50.0      | 7.00           | Active   | Yes    |
+| 1005 | EVS-0005 | Central Rama 9                                                | Type2   | 22.0      | 7.25           | Active   | No     |
+| 1010 | EVS-0010 | Paragon, Former Project                                       | Type2   | 7.0       | 9.00           | Deleted  | No     |
++------+----------+---------------------------------------------------------------+---------+-----------+----------------+----------+--------+
 ```
 
 ### 5.5 ตัวอย่าง `report.txt` (จากชุดข้อมูล 1001-1010 ตามตัวอย่างในโจทย์)
@@ -333,20 +339,20 @@ Endianness   : Little-Endian
 Encoding     : UTF-8 (fixed-length)
 
 [Charge Points]
-+------+----------+-----------------+---------+-----------+----------------+----------+--------+
-| PtID | Station  | Location        | Plug    | Power(kW) | Price(THB/kWh) | Status   | Booked |
-+------+----------+-----------------+---------+-----------+----------------+----------+--------+
-| 1001 | EVS-0001 | สยามพารากอ      | Type2   | 7.4       | 6.00           | Active   | Yes    |
-| 1002 | EVS-0002 | เซ็นทรัลเว      | CCS2    | 150.0     | 6.25           | Active   | Yes    |
-| 1003 | EVS-0003 | ICONSIAM ชั้น G  | CCS2    | 120.0     | 6.75           | Active   | Yes    |
-| 1004 | EVS-0004 | เมกาบางนา       | CHAdeMO | 50.0      | 7.00           | Active   | Yes    |
-| 1005 | EVS-0005 | เซ็นทรัลพร      | Type2   | 22.0      | 7.25           | Active   | No     |
-| 1006 | EVS-0006 | บิกกิ้ง สา       | CHAdeMO | 60.0      | 7.50           | Active   | No     |
-| 1007 | EVS-0007 | ลาดพร้าว ไ       | GB-T    | 60.0      | 8.00           | Active   | No     |
-| 1008 | EVS-0008 | เอเชีย เซน      | CCS2    | 180.0     | 8.50           | Active   | No     |
-| 1009 | EVS-0009 | เซ็นทรัล พ      | Type2   | 11.0      | 9.00           | Active   | No     |
-| 1010 | EVS-0010 | พารากอน โค      | Type2   | 7.0       | 9.00           | Deleted  | No     |
-+------+----------+-----------------+---------+-----------+----------------+----------+--------+
++------+----------+---------------------------------------------------------------+---------+-----------+----------------+----------+--------+
+| PtID | Station  | Location                                                      | Plug    | Power(kW) | Price(THB/kWh) | Status   | Booked |
++------+----------+---------------------------------------------------------------+---------+-----------+----------------+----------+--------+
+| 1001 | EVS-0001 | Siam Paragon, Level B1                                        | Type2   | 7.4       | 6.00           | Active   | Yes    |
+| 1002 | EVS-0002 | CentralWorld, Parking P2                                      | CCS2    | 150.0     | 6.25           | Active   | Yes    |
+| 1003 | EVS-0003 | ICONSIAM, Level G                                             | CCS2    | 120.0     | 6.75           | Active   | Yes    |
+| 1004 | EVS-0004 | Mega Bangna, Zone A                                           | CHAdeMO | 50.0      | 7.00           | Active   | Yes    |
+| 1005 | EVS-0005 | Central Rama 9                                                | Type2   | 22.0      | 7.25           | Active   | No     |
+| 1006 | EVS-0006 | Biking Sathorn, Level 2                                       | CHAdeMO | 60.0      | 7.50           | Active   | No     |
+| 1007 | EVS-0007 | Lat Phrao, Thairath 2                                         | GB-T    | 60.0      | 8.00           | Active   | No     |
+| 1008 | EVS-0008 | Asia Center, Level G                                          | CCS2    | 180.0     | 8.50           | Active   | No     |
+| 1009 | EVS-0009 | Central Phom Phothiya                                         | Type2   | 11.0      | 9.00           | Active   | No     |
+| 1010 | EVS-0010 | Paragon, Former Project                                       | Type2   | 7.0       | 9.00           | Deleted  | No     |
++------+----------+---------------------------------------------------------------+---------+-----------+----------------+----------+--------+
 
 Summary (counting Active status only)
 - Total Points (records) : 10
@@ -419,13 +425,16 @@ Recent Activity (from charge_points.log)
 กำหนด `THAI_TZ = timezone(timedelta(hours=7))` แล้วแปลงด้วย
 `datetime.fromtimestamp(ts, THAI_TZ)` จึงไม่ขึ้นกับเขตเวลาของเครื่องที่รัน
 
-**5) ความกว้างตารางภาษาไทย: ใช้ทั้ง `combining()` และ `category()`**
+**5) ความกว้างข้อความ Unicode ในตาราง: ใช้ทั้ง `combining()` และ `category()`**
 
 ข้อกำหนดให้ใช้ `unicodedata.combining` แต่พบว่า **สระไทยบางตัวมี
 `combining()` = 0** (เช่น "ั" U+0E31, "ิ" U+0E35) เพราะ Unicode จัดให้อยู่ในหมวด
 `Mn` (Mark, nonspacing) ที่มี Combining_Class = 0 หากใช้ `combining()` อย่างเดียว
-เส้นขอบตารางจะเบี้ยว จึงตรวจเพิ่ม `unicodedata.category(char) in ("Mn", "Me")`
-ประกอบด้วย (รายละเอียดในคอมเมนต์ `_char_width()` และมีเทสต์รองรับ)
+เส้นขอบตารางที่มีข้อความ Unicode จะเบี้ยว จึงตรวจเพิ่ม
+`unicodedata.category(char) in ("Mn", "Me")` ประกอบด้วย (รายละเอียดในคอมเมนต์
+`_char_width()` และมีเทสต์รองรับ) ปัจจุบันข้อความในตาราง Terminal และรายงานใช้
+ภาษาอังกฤษเพื่อให้คอลัมน์จัดแนวตรงกัน ส่วนชื่อสถานที่ต้นฉบับยังคงอยู่ในข้อมูล
+และชื่อสถานที่กำหนดเองจะแสดงแยกนอกตาราง
 
 ### 6.2 ข้อสมมติฐานที่ใช้ (กรณีข้อกำหนดกำกวม)
 
@@ -467,7 +476,7 @@ Recent Activity (from charge_points.log)
              - ตารางอธิบายคอลัมน์: คอลัมน์ | ไฟล์และฟิลด์ต้นทาง | ความหมาย
 
 ส่วนที่ 2  [TABLE ...]            ตารางข้อมูลจริง (1-3 ตารางต่อรายงาน)
-             - เรนเดอร์ด้วย display_width จึงไม่เพี้ยนแม้ข้อความไทยมีสระ/วรรณยุกต์
+             - ข้อความในตารางใช้ภาษาอังกฤษ และเรนเดอร์ด้วย display_width เพื่อจัดแนวคอลัมน์
 
 ส่วนที่ 3  [SUMMARY] + [CONSISTENCY CHECK]   ส่วนสรุป
              - ตารางยอดตัวเลขสำคัญ
@@ -477,14 +486,14 @@ Recent Activity (from charge_points.log)
 **ตัวอย่างผลการตรวจสอบความสอดคล้อง (จาก `report_points.txt`)**
 
 ```
-| รายการตรวจสอบ                            | ค่าที่คาดหวัง     | ผลลัพธ์ |
-| จำนวน record ในตาราง = Total Points       | 55              | ผ่าน   |
-| Active + Inactive + Deleted = Total      | 50 + 3 + 2 = 55 | ผ่าน   |
-| Booked(Active) + Available = Active      | 14 + 36 = 50    | ผ่าน   |
-| Free Slots = จำนวน record ที่ถูก soft delete | 2 = 2       | ผ่าน   |
-| point_id ที่ยังไม่ถูกลบ มี record ใน index.dat ครบทุกตัว | 53 รายการ | ผ่าน |
-| index.dat มี record อย่างน้อยเท่าจำนวนรายการที่ยังไม่ถูกลบ | 56 >= 53 | ผ่าน |
-| (ข้อมูลประกอบ) record ใน index.dat ของรหัสที่ถูกลบแล้ว/ช่องถูกใช้ทับ | 1 รายการ | ข้อมูล |
+| Check                                       | Expected       | Result |
+| Total records in table = Total Points      | 55             | PASS   |
+| Active + Inactive + Deleted = Total         | 50 + 3 + 2 = 55 | PASS   |
+| Booked(Active) + Available = Active         | 14 + 36 = 50    | PASS   |
+| Free Slots = soft-deleted records            | 2 = 2           | PASS   |
+| Every active point_id has an index.dat entry | 53 entries      | PASS   |
+| index.dat records >= active points           | 56 >= 53        | PASS   |
+| (Info) Index entries for deleted/reused IDs  | 1 entry         | INFO   |
 ```
 
 > **หมายเหตุเรื่อง "ข้อมูล" (ไม่ใช่ "ไม่ผ่าน")** — เมื่อมีการนำช่องว่างที่เคย
@@ -554,4 +563,3 @@ python tests\verify_menu.py
 * ลบหัวชาร์จที่กำลังถูกจอง (`is_booked=1`) ต้องถูกปฏิเสธ
 * ไฟล์ทั้ง 3 ไฟล์ที่ถูกตัดกลาง record ต้องถูกตรวจจับและซ่อมแซมได้
 * `index.dat` หาย / ชี้ค่าผิด ต้องสร้างใหม่จาก log ได้
-

@@ -239,10 +239,6 @@ def render_table(headers: Sequence[str], rows: Sequence[Sequence[str]],
     Returns:
         รายการบรรทัดของตาราง (ยังไม่รวม \n)
     """
-    if aligns is None:
-        aligns = ["right" if _looks_numeric(header) else "left"
-                  for header in headers]
-
     # ความกว้างของแต่ละคอลัมน์ = ความกว้างหัวคอลัมน์ที่กว้างที่สุด
     widths = [measure(header) for header in headers]
     for row in rows:
@@ -255,6 +251,10 @@ def render_table(headers: Sequence[str], rows: Sequence[Sequence[str]],
 
     def line(left: str, mid: str, right: str) -> str:
         return left + mid.join("-" * (width + 2) for width in widths) + right
+
+    if aligns is None:
+        aligns = ["right" if _looks_numeric(header) else "left"
+                  for header in headers]
 
     def row_line(cells: Sequence[str]) -> str:
         parts = []
