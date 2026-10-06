@@ -12,6 +12,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from unittest import mock
 
 import index as index_module
 import logger as logger_module
@@ -108,6 +109,19 @@ class TestUpdateMenu(AppTestCase):
                                          power_kw=350.0)
         self.assertAlmostEqual(updated.price_per_kwh, 9.99, places=3)
         self.assertAlmostEqual(updated.power_kw, 350.0, places=3)
+
+    def test_update_menu_preserves_full_location_when_kept(self):
+        """กด Enter เพื่อคง Location ต้องไม่เขียนค่าที่ถูกตัดทับชื่อเต็ม"""
+        full_location = "สถานีชาร์จทดสอบชื่อยาวกว่าขนาดฟิลด์ไบนารี"
+        self.app.update_record(1001, location=full_location)
+
+        with mock.patch("validators.ask_point_id", return_value=1001), \
+                mock.patch("validators._read_line", return_value=""):
+            self.app.update_point()
+
+        point = self.app.store.read_at(0)
+        self.assertEqual(
+            self.app.location_store.full_location(point), full_location)
 
     def test_update_does_not_change_file_size(self):
         """การแก้ไขต้องเขียนทับ record เดิม (ขนาดไฟล์คงที่)"""

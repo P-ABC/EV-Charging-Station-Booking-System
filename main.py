@@ -372,7 +372,8 @@ class ChargingStationApp:
         station_code = self._ask_optional(
             "Station Code", point.station_code, validators.validate_station_code)
         location = self._ask_optional(
-            "Location", point.location, validators.validate_location)
+            "Location", self.location_store.full_location(point),
+            validators.validate_location)
         plug_type = self._ask_optional(
             "Plug Type", point.plug_type, validators.validate_plug_type)
         power_kw = self._ask_optional(
@@ -530,13 +531,11 @@ class ChargingStationApp:
             return
 
         rows = []
-        custom_locations = []
         for point in points:
             location = self.location_store.full_location(point)
             location_label = reports_module.english_location_label(location)
             if location_label is None:
-                custom_locations.append((point.point_id, location))
-                location_label = "Custom location"
+                location_label = location
             rows.append((
                 str(point.point_id), point.station_code, location_label,
                 point.plug_type, f"{point.power_kw:.1f}",
@@ -549,10 +548,6 @@ class ChargingStationApp:
         # (Terminal ปรับความกว้างเองได้ ต่างจากไฟล์ .txt ที่ต้องพอดีหน้าจอ)
         for line in report_module.render_table(headers, rows, max_width=None):
             print(line)
-        if custom_locations:
-            print("\n   [LOCATION DETAILS] Custom location names")
-            for point_id, location in custom_locations:
-                print(f"     PtID {point_id}: {location}")
         print(f"   Total: {len(points)} records "
               f"(data file: {self.store.count_records()} records)")
 
@@ -598,13 +593,11 @@ class ChargingStationApp:
             return
 
         rows = []
-        custom_locations = []
         for point in points:
             location = self.location_store.full_location(point)
             location_label = reports_module.english_location_label(location)
             if location_label is None:
-                custom_locations.append((point.point_id, location))
-                location_label = "Custom location"
+                location_label = location
             rows.append((
                 str(point.point_id), point.station_code, location_label,
                 point.plug_type, f"{point.power_kw:.1f}",
@@ -617,10 +610,6 @@ class ChargingStationApp:
         # ไม่จำกัดความกว้างบน Terminal เพื่อให้ชื่อสถานที่ตั้งแสดงครบ
         for line in report_module.render_table(headers, rows, max_width=None):
             print(line)
-        if custom_locations:
-            print("\n   [LOCATION DETAILS] Custom location names")
-            for point_id, location in custom_locations:
-                print(f"     PtID {point_id}: {location}")
 
     # ------------------------------------------------------------------
     # เมนู 4.4) สถิติโดยสรุป

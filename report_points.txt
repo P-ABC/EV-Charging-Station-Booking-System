@@ -1,4 +1,4 @@
-Generated At : 2026-10-05 13:56:09 (+07:00)
+Generated At : 2026-10-06 11:57:34 (+07:00)
 App Version  : 1.0
 Endianness   : Little-Endian
 Encoding     : UTF-8 (fixed-length) (ไฟล์รายงานใช้ UTF-8)
@@ -13,7 +13,7 @@ Data Dir     : .
 | 1002 | EVS-0002 | CentralWorld, Parking P2         | CCS2    | 150.0 | 6.25  | Active   | Yes    | 2026-09-10 07:27:40 |
 | 1003 | EVS-0003 | ICONSIAM, Level G                | CCS2    | 120.0 | 6.75  | Active   | Yes    | 2026-09-10 07:28:40 |
 | 1004 | EVS-0004 | Mega Bangna, Zone A              | CHAdeMO | 50.0  | 7.00  | Active   | Yes    | 2026-09-10 07:29:40 |
-| 1005 | EVS-0005 | Central Rama 9                   | Type2   | 22.0  | 7.25  | Active   | No     | 2026-09-10 07:30:40 |
+| 1005 | EVS-0005 | Central Rama 9                   | Type2   | 22.0  | 7.25  | Active   | Yes    | 2026-10-06 11:57:30 |
 | 1006 | EVS-0006 | Biking Sathorn, Level 2          | CHAdeMO | 60.0  | 7.50  | Active   | No     | 2026-09-10 07:31:40 |
 | 1007 | EVS-0007 | Lat Phrao, Thairath 2            | GB-T    | 60.0  | 8.00  | Active   | No     | 2026-09-10 07:32:40 |
 | 1008 | EVS-0008 | Asia Center, Level G             | CCS2    | 180.0 | 8.50  | Active   | No     | 2026-09-10 07:33:40 |
@@ -81,9 +81,9 @@ Data Dir     : .
 | Active Points                       | 50                                              |
 | Inactive Points (maintenance)       | 3                                               |
 | Deleted Points (soft delete)        | 2                                               |
-| Currently Booked (all statuses)     | 15                                              |
-| Booked Active Points                | 14                                              |
-| Available Now (Active & not booked) | 36                                              |
+| Currently Booked (all statuses)     | 16                                              |
+| Booked Active Points                | 15                                              |
+| Available Now (Active & not booked) | 35                                              |
 | Free Slots (reuseable)              | 2                                               |
 | Records in index.dat                | 55 records                                      |
 | Source files                        | charge_points.dat, charge_points.log, index.dat |
@@ -96,7 +96,7 @@ Data Dir     : .
 +-----------------------------------------------+-----------------+--------+
 | Table record count = Total Points             | 55 = 55         | PASS   |
 | Active + Inactive + Deleted = Total           | 50 + 3 + 2 = 55 | PASS   |
-| Booked Active + Available = Active            | 14 + 36 = 50    | PASS   |
+| Booked Active + Available = Active            | 15 + 35 = 50    | PASS   |
 | Free Slots = soft-deleted record count        | 2 = 2           | PASS   |
 | Every active point_id has an index.dat record | 53 records      | PASS   |
 | index.dat record count >= active point count  | 55 >= 53        | PASS   |

@@ -1,4 +1,4 @@
-Generated At : 2026-10-05 13:56:09 (+07:00)
+Generated At : 2026-10-06 11:57:34 (+07:00)
 App Version  : 1.0
 Endianness   : Little-Endian
 Encoding     : UTF-8 (fixed-length) (ไฟล์รายงานใช้ UTF-8)
@@ -31,10 +31,10 @@ Data Dir     : .
 +------------------------------+-----------+------+--------+--------+-------+----------------+
 | Timestamp                    | Operation | PtID | Status | Booked | Price | Index check    |
 +------------------------------+-----------+------+--------+--------+-------+----------------+
-| 2026-10-05 11:52:42 (+07:00) | ADD       | 2041 | Active | No     | 3.50  | Found in index |
-| 2026-10-05 11:52:42 (+07:00) | ADD       | 2042 | Active | Yes    | 4.25  | Found in index |
-| 2026-10-05 11:52:42 (+07:00) | ADD       | 2043 | Active | No     | 5.00  | Found in index |
-| 2026-10-05 11:52:42 (+07:00) | ADD       | 2044 | Active | No     | 6.00  | Found in index |
+| 2026-10-06 11:57:30 (+07:00) | UPDATE    | 1005 | Active | Yes    | 7.25  | Found in index |
+| 2026-10-06 11:50:55 (+07:00) | VIEW      | 1005 | Active | Yes    | 7.25  | Found in index |
+| 2026-10-06 11:48:54 (+07:00) | UPDATE    | 1005 | Active | Yes    | 7.25  | Found in index |
+| 2026-10-06 11:38:35 (+07:00) | UPDATE    | 1005 | Active | Yes    | 7.25  | Found in index |
 | 2026-10-05 11:52:42 (+07:00) | ADD       | 2045 | Active | No     | 6.50  | Found in index |
 +------------------------------+-----------+------+--------+--------+-------+----------------+
 
@@ -47,8 +47,8 @@ Data Dir     : .
 | Average price (THB/kWh)              | 7.07                                            |
 | Average power (kW)                   | 84.0                                            |
 | Total active connectors              | 50                                              |
-| Total log events                     | 55                                              |
-| ADD / UPDATE / DELETE / VIEW         | 55 / 0 / 0 / 0                                  |
+| Total log events                     | 59                                              |
+| ADD / UPDATE / DELETE / VIEW         | 55 / 3 / 0 / 1                                  |
 | Records in index.dat                 | 55 records                                      |
 | Source files                         | charge_points.dat, charge_points.log, index.dat |
 +--------------------------------------+-------------------------------------------------+
@@ -59,7 +59,7 @@ Data Dir     : .
 | Check                                      | Expected              | Result |
 +--------------------------------------------+-----------------------+--------+
 | Connector counts sum = active record count | 50 = 50               | PASS   |
-| Operation counts sum = log event count     | 55 = 55               | PASS   |
+| Operation counts sum = log event count     | 59 = 59               | PASS   |
 | Displayed average matches source records   | 7.07                  | PASS   |
 | All recent events exist in index.dat       | 5 = 5                 | PASS   |
 | Minimum price <= average <= maximum price  | 3.50 <= 7.07 <= 15.50 | PASS   |

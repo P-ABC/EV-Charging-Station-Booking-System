@@ -1074,7 +1074,6 @@ class TestFullLocationIsReadable(ReportsTestCase):
         content = self.read_report(reports_module.REPORT_POINTS_NAME)
         self.assertIn("ชื่อใหม่หลังแก้ไข ชั้น 9", content)
 
-
 class TestTerminalShowsFullLocation(ReportsTestCase):
     """หน้าจอ Terminal ของโปรแกรมต้องแสดงชื่อสถานที่ตั้งแบบเต็ม
 
@@ -1111,10 +1110,6 @@ class TestTerminalShowsFullLocation(ReportsTestCase):
                 for index, char in enumerate(block[0]) if char == "+"
             )
             for line in block[1:]:
-                self.assertFalse(
-                    any("\u0e00" <= char <= "\u0e7f" for char in line),
-                    f"Terminal table contains Thai text: {line}",
-                )
                 border = "|" if line.startswith("|") else "+"
                 actual = tuple(
                     report_core.display_width(line[:index])
@@ -1167,6 +1162,23 @@ class TestTerminalShowsFullLocation(ReportsTestCase):
         self.assertIn("CentralWorld, Parking P2", output)
         self.assertIn("Siam Paragon, Level B1", output)
 
+    def test_updating_booked_keeps_location_in_report_and_terminal(self):
+        """แก้ Booked อย่างเดียวต้องคง Location เดิมทั้งรายงานและ Terminal"""
+        point = next(p for p in self.app.store.read_all()
+                     if p.point_id == 1005)
+        location = self.app.location_store.full_location(point)
+        self.app.update_record(1005, is_booked=0)
+
+        output = self._capture("view_all")
+        self.app.generate_report(silent=True)
+        content = self.read_report(reports_module.REPORT_POINTS_NAME)
+
+        expected_location = (
+            reports_module.english_location_label(location) or location)
+        self.assertIn(expected_location, output)
+        self.assertIn(expected_location, content)
+        self.assertNotIn("See details", content)
+
     def test_view_filtered_prints_full_location(self):
         """เมนูค้นหา/กรองต้องแสดงชื่อสถานที่ตั้งแบบเต็ม"""
         # view_filtered ใช้ validators.ask_* จึงต้อง stub ให้คืนค่าที่เลือก
@@ -1191,3 +1203,15 @@ class TestTerminalShowsFullLocation(ReportsTestCase):
         self.assertIn(long_name, output)
         # ระเบียกไบนารียังเก็บค่าที่ตัดตามสเปก 30 ไบต์
         self.assertLessEqual(len(created.location.encode("utf-8")), 30)
+        self.assertNotIn("Custom location", output)
+
+    def test_custom_location_is_shown_in_report_table(self):
+        """ชื่อ Location ที่กำหนดเองต้องแสดงแทนข้อความ See details"""
+        location = "สถานีทดสอบ"
+        self.app.add_record(point_id=9002, station_code="EVS-9002",
+                            location=location, plug_type="CCS2",
+                            power_kw=150.0, price_per_kwh=8.25)
+        self.app.generate_report(silent=True)
+        content = self.read_report(reports_module.REPORT_POINTS_NAME)
+        self.assertIn(location, content)
+        self.assertNotIn("See details", content)

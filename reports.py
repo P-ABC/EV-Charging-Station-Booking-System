@@ -246,9 +246,9 @@ def build_report_points(data_dir: str,
     for point in points:
         location = _full_location(point, locations)
         english_location = english_location_label(location)
-        table_location = english_location or "See details"
-        if english_location is None or measure(table_location) > MAIN_TABLE_LOCATION_WIDTH:
-            long_locations.append(f"  PtID {point.point_id}: {english_location or location}")
+        table_location = english_location or location
+        if measure(table_location) > MAIN_TABLE_LOCATION_WIDTH:
+            long_locations.append(f"  PtID {point.point_id}: {table_location}")
         rows.append([
             str(point.point_id),
             point.station_code,
