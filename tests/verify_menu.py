@@ -54,27 +54,19 @@ def _read(path: str) -> str:
 
 
 def check_three_parts(existing):
-    """ข้อ 2: ทุกรายงานต้องมีส่วนครบ และผลตรวจสอบผ่านทั้งหมด
-
-    หมายเหตุ:
-    * โครงสร้างปัจจุบันคือ [TABLE...] -> [SUMMARY] -> [CONSISTENCY CHECK]
-      (ส่วนรายละเอียดหัวตารางถูกตัดออกตามที่ผู้ใช้ต้องการ)
-    * แถวที่ผลเป็น "ข้อมูล" เป็นเพียงข้อมูลประกอบ (ไม่ใช่ข้อผิดพลาด)
-      จึงไม่ต้องนับเป็นรายการที่ "ไม่ผ่าน"
-    """
+    """ข้อ 2: ทุกรายงานต้องมีตารางและ Summary"""
     ok = True
     detail = []
     for name in existing:
         text = _read(os.path.join(DATA_DIR, name))
-        has_all = ("[TABLE" in text and "[SUMMARY]" in text
-                   and "[CONSISTENCY CHECK]" in text)
-        rows = [line for line in text.split("[CONSISTENCY CHECK]", 1)[1]
-                .splitlines() if line.startswith("|")]
-        all_pass = all("ไม่ผ่าน" not in row for row in rows)
-        ok = ok and has_all and all_pass
-        detail.append(f"{name}: โครงสร้าง={'ครบ' if has_all else 'ไม่ครบ'}, "
-                      f"ผลตรวจ={len(rows)} แถว "
-                      f"{'ผ่านทั้งหมด' if all_pass else 'มีไม่ผ่าน'}")
+        has_sections = "[TABLE" in text and "[SUMMARY]" in text
+        no_check_section = "[CONSISTENCY CHECK]" not in text
+        ok = ok and has_sections and no_check_section
+        detail.append(
+            f"{name}: ตารางและ Summary "
+            f"{'ครบ' if has_sections else 'ไม่ครบ'}, "
+            f"Consistency Check "
+            f"{'ถูกตัดออก' if no_check_section else 'ยังอยู่'}")
     return ok, "; ".join(detail)
 
 

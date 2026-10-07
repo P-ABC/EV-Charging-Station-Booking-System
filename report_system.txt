@@ -1,16 +1,16 @@
-Generated At : 2026-10-06 11:57:34 (+07:00)
+Generated At : 2026-10-07 12:23:30 (+07:00)
 App Version  : 1.0
 Endianness   : Little-Endian
 Encoding     : UTF-8 (fixed-length) (ไฟล์รายงานใช้ UTF-8)
-Data Dir     : .
+Data Dir     : D:\Project-Python-EV
 
-[TABLE 1] Binary file status
+[TABLE 3] Binary file status
 -----------------------------------------------------------------------------------------
 +--------------+-------------------+--------------------+--------------+-------+--------+
 | Type         | File              | Struct format      | Bytes/record | Count | Status |
 +--------------+-------------------+--------------------+--------------+-------+--------+
 | Primary data | charge_points.dat | <l10s30s10sfflllll | 82 bytes     | 55    | PASS   |
-| audit log    | charge_points.log | <lllllf            | 24 bytes     | 59    | PASS   |
+| audit log    | charge_points.log | <lllllf            | 24 bytes     | 60    | PASS   |
 | Index        | index.dat         | <ll                | 8 bytes      | 55    | PASS   |
 +--------------+-------------------+--------------------+--------------+-------+--------+
 
@@ -22,21 +22,10 @@ Data Dir     : .
 | Records in charge_points.dat | 55 records                                      |
 | Soft-deleted records         | 2 records                                       |
 | Reusable free slots          | 2                                               |
-| Events in charge_points.log  | 59 records                                      |
+| Events in charge_points.log  | 60 records                                      |
 | Records in index.dat         | 55 records                                      |
 | point_id/log_seq mismatches  | 0                                               |
 | System endianness            | Little-Endian                                   |
+| Binary sources (.dat)        | charge_points.dat, index.dat                    |
 | Source files                 | charge_points.dat, charge_points.log, index.dat |
 +------------------------------+-------------------------------------------------+
-
-[CONSISTENCY CHECK] Data consistency checks
----------------------------------------------------------------------
-+----------------------------------------+-----------------+--------+
-| Check                                  | Expected        | Result |
-+----------------------------------------+-----------------+--------+
-| Primary data file size divisible by 82 | PASS            | PASS   |
-| Log file size divisible by 24          | PASS            | PASS   |
-| Index file size divisible by 8         | PASS            | PASS   |
-| index.dat matches charge_points.log    | No mismatches   | PASS   |
-| System is healthy                      | All files valid | PASS   |
-+----------------------------------------+-----------------+--------+

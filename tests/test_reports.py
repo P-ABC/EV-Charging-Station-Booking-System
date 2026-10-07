@@ -67,8 +67,8 @@ class TestCriterion1AtLeastThreeReports(ReportsTestCase):
 class TestCriterion2ThreeParts(ReportsTestCase):
     """ข้อ 2: แต่ละรายงานต้องมี 3 ส่วนและสอดคล้องกัน"""
 
-    def test_all_reports_have_required_sections(self):
-        """ทุกรายงานต้องมีส่วนตารางข้อมูล, ส่วนสรุป และผลตรวจสอบ
+    def test_all_reports_have_table_and_summary_only(self):
+        """ทุกรายงานมีตารางและส่วนสรุป โดยไม่มี consistency check
 
         หมายเหตุ: ส่วน [COLUMN SPECIFICATION] (รายละเอียดหัวตาราง)
         ถูกตัดออกตามที่ผู้ใช้ต้องการ ให้รายงานเหลือเฉพาะตารางผลลัพธ์จริง
@@ -79,8 +79,8 @@ class TestCriterion2ThreeParts(ReportsTestCase):
                           f"{file_name} ไม่มีส่วนตารางข้อมูล")
             self.assertIn("[SUMMARY]", content,
                           f"{file_name} ไม่มีส่วนสรุป")
-            self.assertIn("[CONSISTENCY CHECK]", content,
-                          f"{file_name} ไม่มีส่วนตรวจสอบความสอดคล้อง")
+            self.assertNotIn("[CONSISTENCY CHECK]", content,
+                             f"{file_name} ยังมีส่วนตรวจสอบความสอดคล้อง")
 
     def test_report_title_line_is_removed(self):
         """บรรทัดชื่อเรื่อง "รายงานที่ N" ต้องถูกตัดออกจากทุกไฟล์
@@ -118,37 +118,39 @@ class TestCriterion2ThreeParts(ReportsTestCase):
                             content.index("[SUMMARY]"),
                             f"{file_name}: ตารางต้องมาก่อนส่วนสรุป")
 
-    def test_sections_appear_in_correct_order(self):
-        """ลำดับต้องเป็น ตาราง -> ส่วนสรุป -> ผลตรวจสอบ"""
+    def test_summary_appears_after_report_tables(self):
+        """ตารางข้อมูลต้องมาก่อนส่วนสรุป"""
         for file_name in reports_module.ALL_REPORT_NAMES:
             content = self.read_report(file_name)
             table_pos = content.index("[TABLE")
             summary_pos = content.index("[SUMMARY]")
-            check_pos = content.index("[CONSISTENCY CHECK]")
             self.assertLess(table_pos, summary_pos,
                             f"{file_name}: ตารางต้องมาก่อนส่วนสรุป")
-            self.assertLess(summary_pos, check_pos,
-                            f"{file_name}: ส่วนสรุปต้องมาก่อนผลตรวจสอบ")
 
-    def test_every_report_has_consistency_check(self):
-        """ทุกรายงานต้องมีส่วนตรวจสอบความสอดคล้องของข้อมูล"""
+    def test_no_report_has_consistency_check(self):
+        """รายงานทั้งหมดไม่แสดงส่วน CONSISTENCY CHECK"""
         for file_name in reports_module.ALL_REPORT_NAMES:
             content = self.read_report(file_name)
-            self.assertIn("[CONSISTENCY CHECK]", content,
-                          f"{file_name} ไม่มีผลการตรวจสอบความสอดคล้อง")
+            self.assertNotIn("[CONSISTENCY CHECK]", content,
+                             f"{file_name} ยังมีผลตรวจสอบความสอดคล้อง")
 
-    def test_consistency_checks_all_pass(self):
-        """Every consistency result is PASS or INFO for valid input."""
+    def test_stats_report_contains_only_table_three_and_summary(self):
+        """report_stats มีเฉพาะตารางที่ 3 และตาราง Summary"""
+        content = self.read_report(reports_module.REPORT_STATS_NAME)
+        self.assertNotIn("[TABLE 1]", content)
+        self.assertIn("[TABLE 2]", content)
+        self.assertNotIn("[TABLE 3]", content)
+        self.assertIn("[SUMMARY]", content)
+        self.assertEqual(content.count("[TABLE"), 1)
+        self.assertNotIn("[CONSISTENCY CHECK]", content)
+
+    def test_summary_sections_include_source_and_key_data(self):
+        """Summary ยังแสดงข้อมูลสำคัญและแหล่งข้อมูล .dat"""
         for file_name in reports_module.ALL_REPORT_NAMES:
             content = self.read_report(file_name)
-            check_section = content.split("[CONSISTENCY CHECK]", 1)[1]
-            rows = [line for line in check_section.splitlines()
-                    if line.startswith("|") and "Result" not in line]
-            self.assertGreater(len(rows), 0,
-                               f"{file_name} ไม่มีแถวผลตรวจสอบ")
-            for row in rows:
-                self.assertNotIn("FAIL", row,
-                                 f"{file_name} has a failed check: {row}")
+            summary = content.split("[SUMMARY]", 1)[1]
+            self.assertIn("charge_points.dat", summary)
+            self.assertIn("index.dat", summary)
 
     def test_summary_numbers_match_table_content(self):
         """ยอดในส่วนสรุปต้องตรงกับจำนวน record จริงในไฟล์ข้อมูล
@@ -210,24 +212,19 @@ class TestCriterion3MultipleSourceFiles(ReportsTestCase):
         self.assertIn("ADD", content)
 
     def test_system_report_compares_index_with_log(self):
-        """รายงานที่ 3 ต้องเทียบข้อมูลระหว่าง index.dat กับ log และรายงานผล
-
-        หลังจากตัดตาราง 1 แถวที่บอกว่า "ทุกอย่างปกติ" ออก
-        ผลการเทียบจะแสดงในส่วน [CONSISTENCY CHECK] แทน
-        ซึ่งเป็นหลักฐานว่า index.dat ถูกนำมาเทียบกับ log จริง
-        """
+        """รายงานระบบยังแสดงผลเปรียบเทียบ index กับ log ใน Summary."""
         content = self.read_report(reports_module.REPORT_SYSTEM_NAME)
         self.assertIn("index.dat", content)
         self.assertIn("charge_points.log", content)
-        self.assertIn("index.dat matches charge_points.log", content)
+        self.assertIn("point_id/log_seq mismatches", content)
 
-    def test_system_report_shows_diff_table_only_when_problem_exists(self):
-        """ต้องไม่แสดงตารางเทียบเมื่อไม่มีปัญหา แต่ต้องแสดงเมื่อมีปัญหาจริง"""
+    def test_system_report_shows_index_log_differences(self):
+        """รายงานระบบตรวจความสอดคล้องและแสดงรายละเอียดเมื่อพบปัญหา"""
         normal = self.read_report(reports_module.REPORT_SYSTEM_NAME)
-        self.assertNotIn("Compare index.dat with charge_points.log", normal,
-                         "ไม่ควรมีตารางเทียบเมื่อไม่มีปัญหา")
+        self.assertIn("point_id/log_seq mismatches", normal)
+        self.assertNotIn("Compare index.dat with charge_points.log", normal)
 
-        # ทำให้ index.dat ไม่ตรงกับ log แล้วต้องมีตารางแสดงปัญหา
+        # ทำให้ index.dat ไม่ตรงกับ log แล้วแสดงตารางรายละเอียดปัญหา
         import index as index_module
         index_path = os.path.join(self.tmp_dir, models.INDEX_FILE_NAME)
         corrupted = index_module.PointIndex(index_path)
@@ -258,7 +255,7 @@ class TestCriterion4SeparateTxtFiles(ReportsTestCase):
         """
         markers = {
             reports_module.REPORT_POINTS_NAME: "All charging points",
-            reports_module.REPORT_STATS_NAME: "Price and power statistics",
+            reports_module.REPORT_STATS_NAME: "[TABLE 2] Recent activity",
             reports_module.REPORT_SYSTEM_NAME: "Binary file status",
         }
         for file_name, own_marker in markers.items():
@@ -284,8 +281,12 @@ class TestCriterion4SeparateTxtFiles(ReportsTestCase):
             if current:
                 blocks.append(current)
 
-            self.assertGreaterEqual(len(blocks), 2,
-                                    f"{file_name} ควรมีตารางอย่างน้อย 2 ตาราง")
+            expected_tables = (1 if file_name in
+                               (reports_module.REPORT_STATS_NAME,
+                                reports_module.REPORT_SYSTEM_NAME) else 2)
+            self.assertGreaterEqual(
+                len(blocks), expected_tables,
+                f"{file_name} มีตารางน้อยกว่าที่กำหนด")
             for block in blocks:
                 widths = {report_core.display_width(line) for line in block}
                 self.assertEqual(len(widths), 1,
@@ -552,25 +553,33 @@ class TestReportValuesMatchData(ReportsTestCase):
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
     def test_stats_report_lists_all_four_plug_types(self):
-        """รายงานสถิติต้องแสดงครบทั้ง 4 ประเภทหัว"""
+        """report_stats แสดงเฉพาะกิจกรรมและ Summary ตามขอบเขตปัจจุบัน"""
         content = self.read_report(reports_module.REPORT_STATS_NAME)
         for plug in ("CCS2", "Type2", "CHAdeMO", "GB-T"):
-            self.assertIn(plug, content)
+            self.assertNotIn(plug, content)
 
     def test_system_report_shows_all_three_file_statuses(self):
-        """รายงานระบบต้องแสดงสถานะไฟล์ทั้ง 3 ไฟล์พร้อมขนาด"""
+        """รายงานระบบแสดงสถานะและ struct ของทุกไฟล์"""
         content = self.read_report(reports_module.REPORT_SYSTEM_NAME)
-        table = content.split("[TABLE 1]", 1)[1].split("[SUMMARY]", 1)[0]
-        rows = [line for line in table.splitlines()
-                if line.startswith("|") and "charge_points.dat" in line]
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(
-            [cell.strip() for cell in rows[0].strip("|").split("|")][:4],
-            ["Primary data", "charge_points.dat",
-             "<l10s30s10sfflllll", "82 bytes"],
-        )
+        self.assertIn("<l10s30s10sfflllll", content)
+        self.assertIn("<lllllf", content)
+        self.assertIn("<ll", content)
         self.assertIn("charge_points.log", content)
         self.assertIn("index.dat", content)
+
+    def test_stats_report_restores_recent_activity_table(self):
+        """รายงานสถานะมีตารางกิจกรรมล่าสุดเป็น Table 2"""
+        content = self.read_report(reports_module.REPORT_STATS_NAME)
+        self.assertIn("[TABLE 2] Recent activity from charge_points.log",
+                      content)
+        self.assertIn("| Timestamp", content)
+
+    def test_system_report_restores_original_sections(self):
+        """รายงานระบบกลับมาแสดงตารางไฟล์ สรุป และผลตรวจแยกกัน"""
+        content = self.read_report(reports_module.REPORT_SYSTEM_NAME)
+        self.assertIn("[TABLE 3] Binary file status", content)
+        self.assertIn("[SUMMARY]", content)
+        self.assertNotIn("[CONSISTENCY CHECK]", content)
 
     def test_report_tables_use_english_text(self):
         """Table labels and cell values are English to avoid Thai glyph drift."""
@@ -721,15 +730,27 @@ class TestNoExplanatoryTables(ReportsTestCase):
             self.assertIn("charge_points.log", content)
             self.assertIn("index.dat", content)
             self.assertIn("Source files", content)
+            self.assertIn("Binary sources (.dat)", content)
+            binary_sources = next(
+                line for line in content.splitlines()
+                if "Binary sources (.dat)" in line
+            )
+            self.assertIn("charge_points.dat", binary_sources)
+            self.assertIn("index.dat", binary_sources)
+
+    def test_location_details_section_is_removed_from_reports(self):
+        """รายงานไม่สร้างส่วน LOCATION DETAILS ซ้ำกับตารางหลัก"""
+        for name in reports_module.ALL_REPORT_NAMES:
+            self.assertNotIn("[LOCATION DETAILS]", self.read_report(name))
 
     def test_main_data_tables_are_kept(self):
-        """ต้องยังมีตารางข้อมูลหลักและตารางสรุป/ตรวจสอบครบ"""
+        """ตารางรายงานสถานะและระบบมีข้อมูลหลักพร้อมผลตรวจ"""
         expectations = {
-            reports_module.REPORT_POINTS_NAME: ("PtID", "Item", "Check"),
-            reports_module.REPORT_STATS_NAME: ("Statistic", "Connector",
-                                               "Check"),
+            reports_module.REPORT_POINTS_NAME: ("PtID", "Item", "Available Now"),
+            reports_module.REPORT_STATS_NAME: ("Timestamp", "SUMMARY",
+                                               "Records in index.dat"),
             reports_module.REPORT_SYSTEM_NAME: ("Struct format", "Item",
-                                                "Check"),
+                                                "Source files"),
         }
         for name, expected in expectations.items():
             content = self.read_report(name)
@@ -956,9 +977,9 @@ class TestTablesFitScreen(ReportsTestCase):
                         f"{name}: เซลล์ถูกตัด -> {cell.strip()}")
 
     def test_long_locations_are_preserved_below_compact_main_table(self):
-        """จำกัดความกว้างช่อง Location แต่เก็บชื่อเต็มไว้ใต้ตาราง"""
+        """แสดงชื่อสถานที่เต็มในตารางโดยไม่สร้าง LOCATION DETAILS แยก"""
         content = self.read_report(reports_module.REPORT_POINTS_NAME)
-        self.assertIn("[LOCATION DETAILS]", content)
+        self.assertNotIn("[LOCATION DETAILS]", content)
         full_location = (
             "Siam Paragon EV Station, New Basement Project and Parking Lot"
         )
@@ -968,7 +989,7 @@ class TestTablesFitScreen(ReportsTestCase):
             if line.startswith("|") and "| 2011 " in line
         )
         location_cell = point_row.strip("|").split("|")[2].strip()
-        self.assertTrue(location_cell.endswith("..."))
+        self.assertEqual(location_cell, full_location)
         self.assertLessEqual(
             report_core.measure(location_cell),
             reports_module.MAIN_TABLE_LOCATION_WIDTH,
@@ -984,7 +1005,7 @@ class TestTablesFitScreen(ReportsTestCase):
                         f"{name}: หัวตารางถูกตัด -> {cell.strip()}")
 
     def test_important_struct_formats_are_visible_in_full(self):
-        """รูปแบบ struct ต้องแสดงครบ ไม่ถูกตัดเป็น <l10s30s..."""
+        """รูปแบบ struct ต้องแสดงครบในตารางระบบ"""
         content = self.read_report(reports_module.REPORT_SYSTEM_NAME)
         self.assertIn("<l10s30s10sfflllll", content)
         self.assertIn("<lllllf", content)
@@ -1007,9 +1028,9 @@ class TestTablesFitScreen(ReportsTestCase):
     def test_main_point_table_is_merged_into_one(self):
         """ตารางหัวชาร์จใช้คอลัมน์ตามตัวอย่างและไม่แสดง LogSeq"""
         content = self.read_report(reports_module.REPORT_POINTS_NAME)
-        self.assertNotIn("[TABLE 1]", content)
+        self.assertIn("[TABLE 1]", content)
         self.assertNotIn("[TABLE 2]", content)
-        self.assertIn("[TABLE]", content)
+        self.assertNotIn("[TABLE 3]", content)
         # ต้องมีหัวตารางที่รวมทุกคอลัมน์อยู่ในตารางเดียว
         header = None
         for block in self._blocks(content):
